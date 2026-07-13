@@ -1,4 +1,4 @@
-# JUCE VST3 Starter (PictureWaveSynth PoC)
+# PhotoSynthesis
 
 This folder contains a minimal JUCE-based C++ plugin workspace to start your picture-driven synth work.
 
