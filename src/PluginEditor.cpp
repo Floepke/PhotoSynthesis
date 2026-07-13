@@ -5,6 +5,8 @@
 namespace
 {
 constexpr int kNumLfos = 8;
+constexpr std::array<const char*, 9> kSyncDivisionNames{ "1/1", "1/2", "1/4", "1/8", "1/16", "1/2T", "1/4T", "1/8T", "1/16T" };
+constexpr std::array<double, 9> kSyncDivisionBeatsPerCycle{ 4.0, 2.0, 1.0, 0.5, 0.25, 4.0 / 3.0, 2.0 / 3.0, 1.0 / 3.0, 1.0 / 6.0 };
 const std::array<juce::Colour, kNumLfos> kLfoTabColours{
     juce::Colour::fromRGB(168, 92, 88),
     juce::Colour::fromRGB(174, 120, 86),
@@ -53,6 +55,18 @@ float clampParameterValue(const juce::String& paramId, float value)
         return juce::jlimit(0.0f, 10.0f, value);
 
     return juce::jlimit(0.0f, 1.0f, value);
+}
+
+double beatsPerCycleFromSyncDivision(int division)
+{
+    const auto clamped = static_cast<size_t>(juce::jlimit(0, static_cast<int>(kSyncDivisionBeatsPerCycle.size()) - 1, division));
+    return kSyncDivisionBeatsPerCycle[clamped];
+}
+
+juce::String syncDivisionTextFromIndex(int division)
+{
+    const auto clamped = static_cast<size_t>(juce::jlimit(0, static_cast<int>(kSyncDivisionNames.size()) - 1, division));
+    return kSyncDivisionNames[clamped];
 }
 }
 
@@ -1096,21 +1110,21 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
     lfoWaveCombo.addItem("Random Steps", 5);
     lfoWaveCombo.addItem("Random Linear", 6);
     lfoWaveCombo.addItem("Random Perlin", 7);
+    lfoWaveCombo.onChange = [this]
+    {
+        lfoRandomPhasePerVoiceButton.setEnabled(lfoWaveCombo.getSelectedId() <= 4);
+    };
     lfoTabPage.addAndMakeVisible(lfoWaveCombo);
 
-    lfoDivisionLabel.setText("Division", juce::dontSendNotification);
-    lfoDivisionLabel.setJustificationType(juce::Justification::centredLeft);
-    lfoDivisionLabel.setColour(juce::Label::textColourId, juce::Colour::fromRGB(214, 219, 230));
-    lfoTabPage.addAndMakeVisible(lfoDivisionLabel);
-    lfoDivisionCombo.addItem("1/1", 1);
-    lfoDivisionCombo.addItem("1/2", 2);
-    lfoDivisionCombo.addItem("1/4", 3);
-    lfoDivisionCombo.addItem("1/8", 4);
-    lfoDivisionCombo.addItem("1/16", 5);
-    lfoTabPage.addAndMakeVisible(lfoDivisionCombo);
-
     lfoSyncButton.setColour(juce::ToggleButton::textColourId, juce::Colour::fromRGB(214, 219, 230));
+    lfoSyncButton.onClick = [this]
+    {
+        rebuildActiveLfoAttachments();
+        configureModeSpecificResetBehaviour();
+    };
     lfoTabPage.addAndMakeVisible(lfoSyncButton);
+    lfoRandomPhasePerVoiceButton.setColour(juce::ToggleButton::textColourId, juce::Colour::fromRGB(214, 219, 230));
+    lfoTabPage.addAndMakeVisible(lfoRandomPhasePerVoiceButton);
     lfoTabPage.addAndMakeVisible(lfoVisualizer);
 
     for (int i = 0; i < kNumModRows; ++i)
@@ -1318,10 +1332,10 @@ void PictureWaveSynthAudioProcessorEditor::configureResetBehaviour()
     configureComboReset(scanResolutionCombo, "scanResolution");
     configureComboReset(polyphonyCombo, "maxVoices");
     configureComboReset(lfoWaveCombo, "lfo1Wave");
-    configureComboReset(lfoDivisionCombo, "lfo1Division");
     configureToggleReset(randomPhaseButton, "randomPhase");
     configureToggleReset(propTempoSyncButton, "propTempoSync");
     configureToggleReset(lfoSyncButton, "lfo1Sync");
+    configureToggleReset(lfoRandomPhasePerVoiceButton, "lfo1RandomPhasePerVoice");
 
     for (int i = 0; i < kNumModRows; ++i)
     {
@@ -1734,9 +1748,8 @@ void PictureWaveSynthAudioProcessorEditor::resized()
 
     lfoWaveLabel.setBounds(14 + 2 * (lfoControlW + lfoControlGap), lfoControlTop + 18, 70, 20);
     lfoWaveCombo.setBounds(14 + 2 * (lfoControlW + lfoControlGap) + 72, lfoControlTop + 16, 120, 24);
-    lfoDivisionLabel.setBounds(14 + 2 * (lfoControlW + lfoControlGap), lfoControlTop + 52, 70, 20);
-    lfoDivisionCombo.setBounds(14 + 2 * (lfoControlW + lfoControlGap) + 72, lfoControlTop + 50, 120, 24);
-    lfoSyncButton.setBounds(14 + 2 * (lfoControlW + lfoControlGap), lfoControlTop + 80, 200, 22);
+    lfoSyncButton.setBounds(14 + 2 * (lfoControlW + lfoControlGap), lfoControlTop + 52, 200, 22);
+    lfoRandomPhasePerVoiceButton.setBounds(14 + 2 * (lfoControlW + lfoControlGap), lfoControlTop + 80, 220, 22);
 
     const int lfoVisualizerBaseY = lfoControlTop + lfoControlH + 46;
     const int lfoVisualizerY = lfoVisualizerBaseY - 10;
@@ -1797,10 +1810,15 @@ void PictureWaveSynthAudioProcessorEditor::timerCallback()
 {
     const auto currentTab = lfoTabs.getCurrentTabIndex();
 
-    const auto lfoRate = static_cast<float>(lfoRateSlider.getValue());
+    const auto lfoRateValue = static_cast<float>(lfoRateSlider.getValue());
     const auto lfoDepth = static_cast<float>(lfoDepthSlider.getValue());
     const auto waveId = juce::jmax(1, lfoWaveCombo.getSelectedId());
-    const auto rateHz = juce::jlimit(0.05f, 20.0f, lfoRate);
+    auto rateHz = juce::jlimit(0.05f, 20.0f, lfoRateValue);
+    if (lfoSyncButton.getToggleState())
+    {
+        const auto divisionIndex = static_cast<int>(std::lround(lfoRateValue));
+        rateHz = static_cast<float>((120.0 / 60.0) / beatsPerCycleFromSyncDivision(divisionIndex));
+    }
     lfoVisualizerPhase = std::fmod(lfoVisualizerPhase + rateHz / 24.0f, 1.0f);
     lfoVisualizer.setVisualState(
         lfoVisualizerPhase,
@@ -1899,17 +1917,50 @@ void PictureWaveSynthAudioProcessorEditor::rebuildActiveLfoAttachments()
     activeLfoRateAttachment.reset();
     activeLfoDepthAttachment.reset();
     activeLfoWaveAttachment.reset();
-    activeLfoDivisionAttachment.reset();
     activeLfoSyncAttachment.reset();
+    activeLfoRandomPhasePerVoiceAttachment.reset();
+
+    lfoRateSlider.textFromValueFunction = nullptr;
+    lfoRateSlider.valueFromTextFunction = nullptr;
 
     const auto lfoIndex = juce::jlimit(0, kNumLfos - 1, lfoTabs.getCurrentTabIndex()) + 1;
     const auto idx = juce::String(lfoIndex);
 
-    activeLfoRateAttachment = std::make_unique<SliderAttachment>(audioProcessor.parameters, "lfo" + idx + "Rate", lfoRateSlider);
+    auto* syncParam = audioProcessor.parameters.getRawParameterValue("lfo" + idx + "Sync");
+    const auto syncEnabled = syncParam != nullptr && syncParam->load() > 0.5f;
+
+    if (syncEnabled)
+    {
+        lfoRateLabel.setText("Division", juce::dontSendNotification);
+        lfoRateSlider.textFromValueFunction = [](double value)
+        {
+            return syncDivisionTextFromIndex(static_cast<int>(std::lround(value)));
+        };
+        lfoRateSlider.valueFromTextFunction = [](const juce::String& text)
+        {
+            for (int i = 0; i < static_cast<int>(kSyncDivisionNames.size()); ++i)
+            {
+                if (text.trim().equalsIgnoreCase(kSyncDivisionNames[static_cast<size_t>(i)]))
+                {
+                    return static_cast<double>(i);
+                }
+            }
+
+            return text.getDoubleValue();
+        };
+        activeLfoRateAttachment = std::make_unique<SliderAttachment>(audioProcessor.parameters, "lfo" + idx + "Division", lfoRateSlider);
+    }
+    else
+    {
+        lfoRateLabel.setText("Rate", juce::dontSendNotification);
+        activeLfoRateAttachment = std::make_unique<SliderAttachment>(audioProcessor.parameters, "lfo" + idx + "Rate", lfoRateSlider);
+    }
+
     activeLfoDepthAttachment = std::make_unique<SliderAttachment>(audioProcessor.parameters, "lfo" + idx + "Depth", lfoDepthSlider);
     activeLfoWaveAttachment = std::make_unique<ComboBoxAttachment>(audioProcessor.parameters, "lfo" + idx + "Wave", lfoWaveCombo);
-    activeLfoDivisionAttachment = std::make_unique<ComboBoxAttachment>(audioProcessor.parameters, "lfo" + idx + "Division", lfoDivisionCombo);
     activeLfoSyncAttachment = std::make_unique<ButtonAttachment>(audioProcessor.parameters, "lfo" + idx + "Sync", lfoSyncButton);
+    activeLfoRandomPhasePerVoiceAttachment = std::make_unique<ButtonAttachment>(audioProcessor.parameters, "lfo" + idx + "RandomPhasePerVoice", lfoRandomPhasePerVoiceButton);
+    lfoRandomPhasePerVoiceButton.setEnabled(lfoWaveCombo.getSelectedId() <= 4);
 }
 
 void PictureWaveSynthAudioProcessorEditor::updateResizeLimitsForDisplay()
@@ -2214,16 +2265,13 @@ void PictureWaveSynthAudioProcessorEditor::updateModeControlLabelsAndVisibility(
         {
             shapeCtrl4Slider.textFromValueFunction = [](double value)
             {
-                static constexpr const char* names[] = { "1/1", "1/2", "1/4", "1/8", "1/16" };
-                const auto idx = juce::jlimit(0, 4, static_cast<int>(std::lround(value)));
-                return juce::String(names[idx]);
+                return syncDivisionTextFromIndex(static_cast<int>(std::lround(value)));
             };
             shapeCtrl4Slider.valueFromTextFunction = [](const juce::String& text)
             {
-                static constexpr const char* names[] = { "1/1", "1/2", "1/4", "1/8", "1/16" };
-                for (int i = 0; i < 5; ++i)
+                for (int i = 0; i < static_cast<int>(kSyncDivisionNames.size()); ++i)
                 {
-                    if (text.trim().equalsIgnoreCase(names[i]))
+                    if (text.trim().equalsIgnoreCase(kSyncDivisionNames[static_cast<size_t>(i)]))
                     {
                         return static_cast<double>(i);
                     }

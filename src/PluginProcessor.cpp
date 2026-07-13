@@ -15,7 +15,8 @@ constexpr uint32_t kStateVersion = 1;
 constexpr int kNumLfos = 8;
 constexpr int kNumModRoutes = 32;
 
-const std::array<const char*, 5> kSyncDivisionNames{ "1/1", "1/2", "1/4", "1/8", "1/16" };
+const std::array<const char*, 9> kSyncDivisionNames{ "1/1", "1/2", "1/4", "1/8", "1/16", "1/2T", "1/4T", "1/8T", "1/16T" };
+const std::array<double, 9> kSyncDivisionBeatsPerCycle{ 4.0, 2.0, 1.0, 0.5, 0.25, 4.0 / 3.0, 2.0 / 3.0, 1.0 / 3.0, 1.0 / 6.0 };
 const std::array<int, 7> kScanResolutionValues{ 32, 64, 128, 256, 512, 1024, 2048 };
 
 const std::array<const char*, 37> kModTargetParamIds{
@@ -47,15 +48,8 @@ T linearInterpolate(T a, T b, T t)
 
 double propellorDivisionToBeatsPerCycle(int division)
 {
-    switch (juce::jlimit(0, static_cast<int>(kSyncDivisionNames.size()) - 1, division))
-    {
-        case 0: return 4.0;   // 1/1
-        case 1: return 2.0;   // 1/2
-        case 2: return 1.0;   // 1/4
-        case 3: return 0.5;   // 1/8
-        case 4: return 0.25;  // 1/16
-        default: return 1.0;
-    }
+    const auto clamped = static_cast<size_t>(juce::jlimit(0, static_cast<int>(kSyncDivisionBeatsPerCycle.size()) - 1, division));
+    return kSyncDivisionBeatsPerCycle[clamped];
 }
 
 float renderLfoSample(int waveform, double phase)
@@ -123,6 +117,12 @@ float renderExtendedLfoSample(int waveform, int lfoIndex, int64_t cyclePosition,
         default:
             return current;
     }
+}
+
+double phaseOffsetFromVoiceSeed(int lfoIndex, uint32_t voiceSeed)
+{
+    const auto mixedSeed = mixNoiseSeed(voiceSeed ^ (0x9e3779b9U * static_cast<uint32_t>(lfoIndex + 1)));
+    return static_cast<double>(mixedSeed) / static_cast<double>(std::numeric_limits<uint32_t>::max());
 }
 
 int modTargetIndexForParamId(const char* paramId)
@@ -511,6 +511,7 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
     std::array<float, kNumLfos> lfoValues{};
     std::array<float, kNumLfos> lfoDepths{};
     std::array<int, kNumLfos> lfoWaveforms{};
+    std::array<bool, kNumLfos> lfoRandomPhasePerVoice{};
     for (int i = 0; i < kNumLfos; ++i)
     {
         const juce::String idx = juce::String(i + 1);
@@ -519,9 +520,11 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
         const auto waveform = static_cast<int>(std::lround(parameters.getRawParameterValue("lfo" + idx + "Wave")->load()));
         const auto syncEnabled = parameters.getRawParameterValue("lfo" + idx + "Sync")->load() > 0.5f;
         const auto division = static_cast<int>(std::lround(parameters.getRawParameterValue("lfo" + idx + "Division")->load()));
+        const auto randomPhasePerVoice = parameters.getRawParameterValue("lfo" + idx + "RandomPhasePerVoice")->load() > 0.5f;
 
         lfoDepths[static_cast<size_t>(i)] = depth;
         lfoWaveforms[static_cast<size_t>(i)] = waveform;
+        lfoRandomPhasePerVoice[static_cast<size_t>(i)] = randomPhasePerVoice;
 
         double effectiveRateHz = static_cast<double>(rateHz);
         if (syncEnabled)
@@ -556,6 +559,7 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
         int target = 0;
         float amount = 0.0f;
         bool usesRandomWave = false;
+        bool usesPerVoiceVariation = false;
     };
 
     std::array<ModRouteState, kNumModRoutes> routes{};
@@ -575,6 +579,8 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
         routeState.target = juce::jlimit(0, static_cast<int>(kModTargetParamIds.size()), static_cast<int>(std::lround(parameters.getRawParameterValue("mod" + idx + "Target")->load())));
         routeState.amount = juce::jlimit(-1.0f, 1.0f, parameters.getRawParameterValue("mod" + idx + "Amount")->load());
         routeState.usesRandomWave = isRandomLfoWaveform(lfoWaveforms[static_cast<size_t>(routeState.source)]);
+        routeState.usesPerVoiceVariation = routeState.usesRandomWave
+            || (lfoRandomPhasePerVoice[static_cast<size_t>(routeState.source)] && !routeState.usesRandomWave);
 
         if (routeState.target <= 0)
         {
@@ -672,24 +678,24 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
         waveTableDirty.store(true);
     }
 
-    bool hasPerVoiceRandomRoutes = false;
-    bool hasPerVoiceRandomScannerRoutes = false;
+    bool hasPerVoiceVariableRoutes = false;
+    bool hasPerVoiceVariableScannerRoutes = false;
     for (const auto& route : routes)
     {
-        if (!route.enabled || !route.usesRandomWave)
+        if (!route.enabled || !route.usesPerVoiceVariation)
         {
             continue;
         }
 
-        hasPerVoiceRandomRoutes = true;
+        hasPerVoiceVariableRoutes = true;
         if (route.target >= 7)
         {
-            hasPerVoiceRandomScannerRoutes = true;
+            hasPerVoiceVariableScannerRoutes = true;
         }
     }
 
     const auto usePerVoicePropellorPhase = scanner.mode == 4 && randomPhaseEnabled;
-    const auto usePerVoiceScannerState = usePerVoicePropellorPhase || hasPerVoiceRandomScannerRoutes;
+    const auto usePerVoiceScannerState = usePerVoicePropellorPhase || hasPerVoiceVariableScannerRoutes;
 
     std::shared_ptr<LoadedImageData> localImage;
     if (usePerVoiceScannerState)
@@ -715,7 +721,7 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
             }
 
             std::array<float, kModTargetParamIds.size()> voiceModulationSums = modulationSums;
-            if (hasPerVoiceRandomRoutes)
+            if (hasPerVoiceVariableRoutes)
             {
                 voiceModulationSums.fill(0.0f);
                 for (const auto& route : routes)
@@ -734,6 +740,13 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
                             lfoCyclePositions[static_cast<size_t>(route.source)],
                             lfoPhases[static_cast<size_t>(route.source)],
                             voice->getRandomModulationSeed()) * lfoDepths[static_cast<size_t>(route.source)];
+                    }
+                    else if (lfoRandomPhasePerVoice[static_cast<size_t>(route.source)])
+                    {
+                        const auto offsetPhase = lfoPhases[static_cast<size_t>(route.source)]
+                            + phaseOffsetFromVoiceSeed(route.source, voice->getRandomModulationSeed());
+                        sourceValue = renderLfoSample(lfoWaveforms[static_cast<size_t>(route.source)], offsetPhase)
+                            * lfoDepths[static_cast<size_t>(route.source)];
                     }
 
                     if (route.target <= 0)
@@ -771,18 +784,18 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
                 return param->convertFrom0to1(modNorm);
             };
 
-            const auto voiceAttack = hasPerVoiceRandomRoutes ? readVoiceParam("attack") : attack;
-            const auto voiceDecay = hasPerVoiceRandomRoutes ? readVoiceParam("decay") : decay;
-            const auto voiceSustain = hasPerVoiceRandomRoutes ? readVoiceParam("sustain") : sustain;
-            const auto voiceNoteDrift = hasPerVoiceRandomRoutes ? readVoiceParam("noteDrift") : noteDriftAmount;
-            const auto voiceLiveNoteDrift = hasPerVoiceRandomRoutes ? readVoiceParam("liveNoteDrift") : liveNoteDriftHz;
+            const auto voiceAttack = hasPerVoiceVariableRoutes ? readVoiceParam("attack") : attack;
+            const auto voiceDecay = hasPerVoiceVariableRoutes ? readVoiceParam("decay") : decay;
+            const auto voiceSustain = hasPerVoiceVariableRoutes ? readVoiceParam("sustain") : sustain;
+            const auto voiceNoteDrift = hasPerVoiceVariableRoutes ? readVoiceParam("noteDrift") : noteDriftAmount;
+            const auto voiceLiveNoteDrift = hasPerVoiceVariableRoutes ? readVoiceParam("liveNoteDrift") : liveNoteDriftHz;
 
-            voice->updateAdsr(voiceAttack, voiceDecay, voiceSustain, hasPerVoiceRandomRoutes ? readVoiceParam("release") : release);
+            voice->updateAdsr(voiceAttack, voiceDecay, voiceSustain, hasPerVoiceVariableRoutes ? readVoiceParam("release") : release);
             voice->setNoteDriftAmount(voiceNoteDrift);
             voice->setLiveNoteDriftRateHz(voiceLiveNoteDrift);
             voice->setRandomPropellorPhaseEnabled(usePerVoicePropellorPhase);
 
-            if (!displayedVoiceValues && voice->isVoiceActive() && hasPerVoiceRandomRoutes)
+            if (!displayedVoiceValues && voice->isVoiceActive() && hasPerVoiceVariableRoutes)
             {
                 for (size_t targetIndex = 0; targetIndex < kModTargetParamIds.size(); ++targetIndex)
                 {
@@ -804,7 +817,7 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
                 auto& left = perVoiceWaveTableLeft[static_cast<size_t>(i)];
                 auto& right = perVoiceWaveTableRight[static_cast<size_t>(i)];
                 auto voiceScanner = scanner;
-                if (hasPerVoiceRandomScannerRoutes)
+                if (hasPerVoiceVariableScannerRoutes)
                 {
                     voiceScanner.x = readVoiceParam("scanX");
                     voiceScanner.y = readVoiceParam("scanY");
@@ -1125,8 +1138,10 @@ PictureWaveSynthAudioProcessor::ParameterLayout PictureWaveSynthAudioProcessor::
             "lfo" + idx + "Wave", "LFO " + idx + " Wave", juce::StringArray{ "Sine", "Triangle", "Saw", "Square", "Random Steps", "Random Linear", "Random Perlin" }, 0));
         params.push_back(std::make_unique<juce::AudioParameterBool>(
             "lfo" + idx + "Sync", "LFO " + idx + " Sync", false));
+        params.push_back(std::make_unique<juce::AudioParameterBool>(
+            "lfo" + idx + "RandomPhasePerVoice", "LFO " + idx + " Random Phase Per Voice", false));
         params.push_back(std::make_unique<juce::AudioParameterChoice>(
-            "lfo" + idx + "Division", "LFO " + idx + " Division", juce::StringArray{ "1/1", "1/2", "1/4", "1/8", "1/16" }, 2));
+            "lfo" + idx + "Division", "LFO " + idx + " Division", juce::StringArray{ "1/1", "1/2", "1/4", "1/8", "1/16", "1/2T", "1/4T", "1/8T", "1/16T" }, 2));
     }
 
     juce::StringArray modSources;

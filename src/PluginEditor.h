@@ -296,12 +296,11 @@ private:
     juce::Slider lfoRateSlider;
     juce::Slider lfoDepthSlider;
     ResettableComboBox lfoWaveCombo;
-    ResettableComboBox lfoDivisionCombo;
     ResettableToggleButton lfoSyncButton{ "Tempo Sync" };
+    ResettableToggleButton lfoRandomPhasePerVoiceButton{ "Random Phase Per Voice" };
     juce::Label lfoRateLabel;
     juce::Label lfoDepthLabel;
     juce::Label lfoWaveLabel;
-    juce::Label lfoDivisionLabel;
     LfoVisualizer lfoVisualizer;
     float lfoVisualizerPhase = 0.0f;
 
@@ -347,8 +346,8 @@ private:
     std::unique_ptr<SliderAttachment> activeLfoRateAttachment;
     std::unique_ptr<SliderAttachment> activeLfoDepthAttachment;
     std::unique_ptr<ComboBoxAttachment> activeLfoWaveAttachment;
-    std::unique_ptr<ComboBoxAttachment> activeLfoDivisionAttachment;
     std::unique_ptr<ButtonAttachment> activeLfoSyncAttachment;
+    std::unique_ptr<ButtonAttachment> activeLfoRandomPhasePerVoiceAttachment;
     std::unique_ptr<ComboBoxAttachment> polyphonyAttachment;
 
     std::array<std::unique_ptr<ButtonAttachment>, kNumModRows> modEnabledAttachments;
