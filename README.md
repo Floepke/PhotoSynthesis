@@ -1,43 +1,54 @@
 # PhotoSynthesis
 
-This folder contains a minimal JUCE-based C++ plugin workspace to start your picture-driven synth work.
+PhotoSynthesis is an image-driven software synthesizer built with JUCE and C++20.
+It scans user-loaded images to generate stereo wavetable content and combines that with a modern modulation workflow, including multi-LFO routing and per-voice variation controls.
 
-Current status:
-- Builds a synth plugin (VST3 + Standalone target)
-- 32-voice polyphonic sine synth core
-- ADSR parameters and output gain in a simple UI
-- Ready to evolve into image-scanned oscillator logic
+The project currently builds both:
+- VST3 plugin
+- Standalone application
 
-## Clean Setup On A New Machine
+## What It Is
 
-If you copied this project from another operating system, delete the existing `build/` folder before configuring on the new machine. The copied CMake cache stores absolute compiler and dependency paths from the old host and cannot be reused safely across Linux and macOS.
+PhotoSynthesis is designed around the idea that image geometry can be used as a sound source.
+Instead of a traditional fixed oscillator, scanner modes traverse pixels from an image and map RGBA data into stereo output tables.
 
-## Prerequisites
+The synth includes:
+- Polyphonic voice engine (up to 32 voices)
+- Image scanner modes (Line, Oval, Rectangle, Triangle, Propellor)
+- Modulation matrix with 32 assignable routes
+- 8 LFOs with waveform selection, tempo sync, and extended random behavior
 
-Common requirements:
+## Key Features
+
+- Image-based wavetable synthesis
+- Scanner shape controls with direct UI manipulation
+- RGBA-to-stereo mapping (independent left/right channel routing)
+- 8 LFO tabs with:
+  - Sine, Triangle, Saw, Square, Random Steps, Random Linear, Random Perlin
+  - Tempo sync divisions including triplets
+  - Random phase per voice option for non-random waveforms
+- 32-slot modulation routing system
+- Per-voice modulation variation for random and random-phase-enabled LFO workflows
+- ADSR envelope, gain, note drift, and live drift controls
+- Polyphony selector and round-robin/voice-steal behavior
+- UI zoom and persisted editor geometry
+- Preset save/load and init reset workflow
+
+## Build Requirements
 
 - CMake 3.22+
-- A C++20 compiler
+- C++20 compiler
 - Git
 - Ninja (recommended)
 
 ### macOS
 
-Install the Apple command line tools:
-
 ```sh
 xcode-select --install
-```
-
-Install Ninja with Homebrew:
-
-```sh
 brew install ninja
 ```
 
-### Linux
-
-Example (Debian/Ubuntu style):
+### Linux (example)
 
 ```sh
 sudo apt update
@@ -47,47 +58,38 @@ sudo apt install -y build-essential cmake ninja-build \
   mesa-common-dev pkg-config git
 ```
 
-## Configure
-
-From this folder:
+## Configure And Build
 
 ```sh
 rm -rf build
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-```
-
-Notes:
-
-- JUCE is fetched automatically from GitHub by CMake, so the first configure needs network access.
-- Keep the same generator for re-configures, or clear `build/` before switching generators.
-
-## Build
-
-```sh
 cmake --build build -j
 ```
 
-## Artifacts
+Notes:
+- JUCE is fetched automatically from GitHub during configure.
+- If moving the project between machines/OSes, remove `build/` first.
 
-After build, look in:
+## Output Artifacts
 
-- Standalone app: `build/PictureWaveSynth_artefacts/Release/Standalone/`
-- VST3 plugin bundle: `build/PictureWaveSynth_artefacts/Release/VST3/`
+- Standalone: `build/PhotoSynthesis_artefacts/Release/Standalone/`
+- VST3: `build/PhotoSynthesis_artefacts/Release/VST3/`
 
-On macOS, copy the `.vst3` bundle to:
+On macOS, the plugin is typically installed to:
+- `~/Library/Audio/Plug-Ins/VST3/PhotoSynthesis.vst3`
 
-- `~/Library/Audio/Plug-Ins/VST3`
+If `COPY_PLUGIN_AFTER_BUILD` is enabled (default in this project), build/install is automatic.
 
-On Linux, copy the `.vst3` bundle to one of these paths:
+## Futures / Roadmap
 
-- `~/.vst3`
-- `~/.local/share/vst3`
+- Higher-quality anti-aliasing for scanned waveforms
+- More advanced image-domain filters before wavetable generation
+- Additional modulation sources (MPE/aftertouch/macros)
+- Improved preset browser and tagging
+- Performance profiling and CPU optimization pass
+- Extended export/import tooling for scanner snapshots
+- Additional plugin formats and packaging automation
 
-Then rescan plugins in your DAW.
+## License
 
-## Next steps for your concept
-
-1. Replace sine voice with image-scanned wavetable generation.
-2. Add image loader and scanner controls (angle, position, width).
-3. Add RGBA mapping matrix to stereo (later multichannel).
-4. Add anti-alias strategy for scanned waveforms.
+This project is released under the MIT License.
