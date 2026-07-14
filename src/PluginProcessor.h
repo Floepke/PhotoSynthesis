@@ -211,6 +211,12 @@ private:
     juce::MemoryBlock initialStateWithoutImage;
     ScannerParams lastScannerParams;
     bool hasLastScannerParams = false;
+    int modulationPreviewVoiceIndex = -1;
+    uint32_t modulationPreviewSeed = 0;
+    float modulationVelocity = 0.0f;
+    float modulationAftertouch = 0.0f;
+    float modulationModWheel = 0.0f;
+    int heldNoteCount = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PictureWaveSynthAudioProcessor)
 };

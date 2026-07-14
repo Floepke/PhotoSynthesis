@@ -14,6 +14,16 @@ constexpr uint32_t kStateMagic = 0x50575331; // PWS1
 constexpr uint32_t kStateVersion = 1;
 constexpr int kNumLfos = 8;
 constexpr int kNumModRoutes = 32;
+constexpr int kNumStandardModSources = 4;
+constexpr int kNumModSources = kNumLfos + kNumStandardModSources;
+
+enum StandardModSource
+{
+    velocity = kNumLfos,
+    aftertouch,
+    modWheel,
+    noteGate
+};
 
 const std::array<const char*, 9> kSyncDivisionNames{ "1/1", "1/2", "1/4", "1/8", "1/16", "1/2T", "1/4T", "1/8T", "1/16T" };
 const std::array<double, 9> kSyncDivisionBeatsPerCycle{ 4.0, 2.0, 1.0, 0.5, 0.25, 4.0 / 3.0, 2.0 / 3.0, 1.0 / 3.0, 1.0 / 6.0 };
@@ -459,6 +469,12 @@ void PictureWaveSynthAudioProcessor::prepareToPlay(double sampleRate, int sample
         value.store(0.0f);
     }
 
+    modulationVelocity = 0.0f;
+    modulationAftertouch = 0.0f;
+    modulationModWheel = 0.0f;
+    heldNoteCount = 0;
+    modulationPreviewSeed = static_cast<uint32_t>(juce::Random::getSystemRandom().nextInt());
+
     for (auto* voice : voices)
     {
         if (voice != nullptr)
@@ -491,6 +507,41 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
 {
     juce::ScopedNoDenormals noDenormals;
     buffer.clear();
+
+    for (const auto metadata : midiMessages)
+    {
+        const auto message = metadata.getMessage();
+        if (message.isNoteOn())
+        {
+            modulationVelocity = juce::jlimit(0.0f, 1.0f, message.getFloatVelocity());
+            ++heldNoteCount;
+        }
+        else if (message.isNoteOff())
+        {
+            heldNoteCount = juce::jmax(0, heldNoteCount - 1);
+        }
+        else if (message.isAllNotesOff() || message.isAllSoundOff())
+        {
+            heldNoteCount = 0;
+        }
+        else if (message.isChannelPressure())
+        {
+            modulationAftertouch = juce::jlimit(0.0f, 1.0f, static_cast<float>(message.getChannelPressureValue()) / 127.0f);
+        }
+        else if (message.isAftertouch())
+        {
+            modulationAftertouch = juce::jlimit(0.0f, 1.0f, static_cast<float>(message.getAfterTouchValue()) / 127.0f);
+        }
+        else if (message.isController() && message.getControllerNumber() == 1)
+        {
+            modulationModWheel = juce::jlimit(0.0f, 1.0f, static_cast<float>(message.getControllerValue()) / 127.0f);
+        }
+    }
+
+    if (heldNoteCount <= 0)
+    {
+        modulationVelocity = 0.0f;
+    }
 
     const std::array<int, 6> polyphonyChoices{ 4, 8, 12, 16, 24, 32 };
     const auto polyChoiceIndex = juce::jlimit(0, static_cast<int>(polyphonyChoices.size()) - 1,
@@ -558,6 +609,7 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
         int source = 0;
         int target = 0;
         float amount = 0.0f;
+        bool bipolar = true;
         bool usesRandomWave = false;
         bool usesPerVoiceVariation = false;
     };
@@ -565,6 +617,49 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
     std::array<ModRouteState, kNumModRoutes> routes{};
     std::array<float, kModTargetParamIds.size()> modulationSums{};
     modulationSums.fill(0.0f);
+    const auto sourceValueForIndex = [this, &lfoValues](int sourceIndex)
+    {
+        if (sourceIndex >= 0 && sourceIndex < kNumLfos)
+        {
+            return lfoValues[static_cast<size_t>(sourceIndex)];
+        }
+
+        switch (sourceIndex)
+        {
+            case StandardModSource::velocity:
+                return modulationVelocity;
+            case StandardModSource::aftertouch:
+                return modulationAftertouch;
+            case StandardModSource::modWheel:
+                return modulationModWheel;
+            case StandardModSource::noteGate:
+                return heldNoteCount > 0 ? 1.0f : 0.0f;
+            default:
+                return 0.0f;
+        }
+    };
+
+    const auto sourceValueForRoute = [](const ModRouteState& route, float rawSourceValue)
+    {
+        const auto sourceIsNaturallyBipolar = route.source >= 0 && route.source < kNumLfos;
+        if (route.bipolar)
+        {
+            if (sourceIsNaturallyBipolar)
+            {
+                return rawSourceValue;
+            }
+
+            return juce::jlimit(-1.0f, 1.0f, rawSourceValue * 2.0f - 1.0f);
+        }
+
+        if (sourceIsNaturallyBipolar)
+        {
+            return juce::jlimit(0.0f, 1.0f, 0.5f * (rawSourceValue + 1.0f));
+        }
+
+        return juce::jlimit(0.0f, 1.0f, rawSourceValue);
+    };
+
     for (int route = 1; route <= kNumModRoutes; ++route)
     {
         auto& routeState = routes[static_cast<size_t>(route - 1)];
@@ -575,12 +670,16 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
             continue;
         }
 
-        routeState.source = juce::jlimit(0, kNumLfos - 1, static_cast<int>(std::lround(parameters.getRawParameterValue("mod" + idx + "Source")->load())));
+        routeState.source = juce::jlimit(0, kNumModSources - 1, static_cast<int>(std::lround(parameters.getRawParameterValue("mod" + idx + "Source")->load())));
         routeState.target = juce::jlimit(0, static_cast<int>(kModTargetParamIds.size()), static_cast<int>(std::lround(parameters.getRawParameterValue("mod" + idx + "Target")->load())));
         routeState.amount = juce::jlimit(-1.0f, 1.0f, parameters.getRawParameterValue("mod" + idx + "Amount")->load());
-        routeState.usesRandomWave = isRandomLfoWaveform(lfoWaveforms[static_cast<size_t>(routeState.source)]);
+        routeState.bipolar = parameters.getRawParameterValue("mod" + idx + "Bipolar")->load() > 0.5f;
+        routeState.usesRandomWave = routeState.source < kNumLfos
+            && isRandomLfoWaveform(lfoWaveforms[static_cast<size_t>(routeState.source)]);
         routeState.usesPerVoiceVariation = routeState.usesRandomWave
-            || (lfoRandomPhasePerVoice[static_cast<size_t>(routeState.source)] && !routeState.usesRandomWave);
+            || (routeState.source < kNumLfos
+                && lfoRandomPhasePerVoice[static_cast<size_t>(routeState.source)]
+                && !routeState.usesRandomWave);
 
         if (routeState.target <= 0)
         {
@@ -593,7 +692,8 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
             continue;
         }
 
-        modulationSums[static_cast<size_t>(targetIndex)] += routeState.amount * lfoValues[static_cast<size_t>(routeState.source)];
+        const auto sourceValue = sourceValueForRoute(routeState, sourceValueForIndex(routeState.source));
+        modulationSums[static_cast<size_t>(targetIndex)] += routeState.amount * sourceValue;
     }
 
     for (size_t i = 0; i < modulationSums.size(); ++i)
@@ -708,8 +808,66 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
         regenerateWaveTablesIfNeeded(scanner);
     }
 
+    if (hasPerVoiceVariableRoutes)
+    {
+        std::array<float, kModTargetParamIds.size()> previewModulationSums{};
+        previewModulationSums.fill(0.0f);
+        for (const auto& route : routes)
+        {
+            if (!route.enabled)
+            {
+                continue;
+            }
+
+            auto sourceValue = sourceValueForIndex(route.source);
+            if (route.source < kNumLfos && route.usesRandomWave)
+            {
+                sourceValue = renderExtendedLfoSample(
+                    lfoWaveforms[static_cast<size_t>(route.source)],
+                    route.source,
+                    lfoCyclePositions[static_cast<size_t>(route.source)],
+                    lfoPhases[static_cast<size_t>(route.source)],
+                    modulationPreviewSeed) * lfoDepths[static_cast<size_t>(route.source)];
+            }
+            else if (route.source < kNumLfos && lfoRandomPhasePerVoice[static_cast<size_t>(route.source)])
+            {
+                const auto offsetPhase = lfoPhases[static_cast<size_t>(route.source)]
+                    + phaseOffsetFromVoiceSeed(route.source, modulationPreviewSeed);
+                sourceValue = renderLfoSample(lfoWaveforms[static_cast<size_t>(route.source)], offsetPhase)
+                    * lfoDepths[static_cast<size_t>(route.source)];
+            }
+
+            sourceValue = sourceValueForRoute(route, sourceValue);
+
+            if (route.target <= 0)
+            {
+                continue;
+            }
+
+            const auto targetIndex = route.target - 1;
+            if (targetIndex >= static_cast<int>(kModTargetParamIds.size()))
+            {
+                continue;
+            }
+
+            previewModulationSums[static_cast<size_t>(targetIndex)] += route.amount * sourceValue;
+        }
+
+        for (size_t targetIndex = 0; targetIndex < kModTargetParamIds.size(); ++targetIndex)
+        {
+            modulationDisplayValues[targetIndex].store(previewModulationSums[targetIndex]);
+            auto* param = parameters.getParameter(kModTargetParamIds[targetIndex]);
+            if (param != nullptr)
+            {
+                const auto actualValue = param->convertFrom0to1(
+                    juce::jlimit(0.0f, 1.0f, param->getValue() + previewModulationSums[targetIndex]));
+                effectiveDisplayValues[targetIndex].store(actualValue);
+            }
+        }
+    }
+
     const auto basePropellorPhase = propellorPhase.load();
-    bool displayedVoiceValues = false;
+
     for (int i = 0; i < static_cast<int>(voices.size()); ++i)
     {
         if (auto* voice = voices[static_cast<size_t>(i)])
@@ -731,8 +889,8 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
                         continue;
                     }
 
-                    auto sourceValue = lfoValues[static_cast<size_t>(route.source)];
-                    if (route.usesRandomWave)
+                    auto sourceValue = sourceValueForIndex(route.source);
+                    if (route.source < kNumLfos && route.usesRandomWave)
                     {
                         sourceValue = renderExtendedLfoSample(
                             lfoWaveforms[static_cast<size_t>(route.source)],
@@ -741,13 +899,15 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
                             lfoPhases[static_cast<size_t>(route.source)],
                             voice->getRandomModulationSeed()) * lfoDepths[static_cast<size_t>(route.source)];
                     }
-                    else if (lfoRandomPhasePerVoice[static_cast<size_t>(route.source)])
+                    else if (route.source < kNumLfos && lfoRandomPhasePerVoice[static_cast<size_t>(route.source)])
                     {
                         const auto offsetPhase = lfoPhases[static_cast<size_t>(route.source)]
                             + phaseOffsetFromVoiceSeed(route.source, voice->getRandomModulationSeed());
                         sourceValue = renderLfoSample(lfoWaveforms[static_cast<size_t>(route.source)], offsetPhase)
                             * lfoDepths[static_cast<size_t>(route.source)];
                     }
+
+                    sourceValue = sourceValueForRoute(route, sourceValue);
 
                     if (route.target <= 0)
                     {
@@ -794,23 +954,6 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
             voice->setNoteDriftAmount(voiceNoteDrift);
             voice->setLiveNoteDriftRateHz(voiceLiveNoteDrift);
             voice->setRandomPropellorPhaseEnabled(usePerVoicePropellorPhase);
-
-            if (!displayedVoiceValues && voice->isVoiceActive() && hasPerVoiceVariableRoutes)
-            {
-                for (size_t targetIndex = 0; targetIndex < kModTargetParamIds.size(); ++targetIndex)
-                {
-                    modulationDisplayValues[targetIndex].store(voiceModulationSums[targetIndex]);
-                    auto* param = parameters.getParameter(kModTargetParamIds[targetIndex]);
-                    if (param != nullptr)
-                    {
-                        const auto actualValue = param->convertFrom0to1(
-                            juce::jlimit(0.0f, 1.0f, param->getValue() + voiceModulationSums[targetIndex]));
-                        effectiveDisplayValues[targetIndex].store(actualValue);
-                    }
-                }
-
-                displayedVoiceValues = true;
-            }
 
             if (usePerVoiceScannerState)
             {
@@ -1149,6 +1292,10 @@ PictureWaveSynthAudioProcessor::ParameterLayout PictureWaveSynthAudioProcessor::
     {
         modSources.add("LFO " + juce::String(i));
     }
+    modSources.add("Velocity");
+    modSources.add("Aftertouch");
+    modSources.add("Mod Wheel");
+    modSources.add("Note Gate");
     juce::StringArray modTargets;
     for (const auto* name : kModTargetNames)
     {
@@ -1165,6 +1312,8 @@ PictureWaveSynthAudioProcessor::ParameterLayout PictureWaveSynthAudioProcessor::
             "mod" + idx + "Source", "Mod " + idx + " Source", modSources, sourceDefault));
         params.push_back(std::make_unique<juce::AudioParameterChoice>(
             "mod" + idx + "Target", "Mod " + idx + " Target", modTargets, 0));
+        params.push_back(std::make_unique<juce::AudioParameterBool>(
+            "mod" + idx + "Bipolar", "Mod " + idx + " Bipolar", true));
         params.push_back(std::make_unique<juce::AudioParameterFloat>(
             "mod" + idx + "Amount", "Mod " + idx + " Amount", juce::NormalisableRange<float>(-1.0f, 1.0f, 0.001f), 0.0f));
     }

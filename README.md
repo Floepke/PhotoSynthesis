@@ -83,7 +83,6 @@ If `COPY_PLUGIN_AFTER_BUILD` is enabled (default in this project), build/install
 ## Futures / Roadmap
 
 - Higher-quality anti-aliasing for scanned waveforms
-- More advanced image-domain filters before wavetable generation
 - Additional modulation sources (MPE/aftertouch/macros)
 - Improved preset browser and tagging
 - Performance profiling and CPU optimization pass

@@ -159,6 +159,28 @@ void PictureWaveSynthAudioProcessorEditor::ModulationSlider::paintOverChildren(j
     }
 }
 
+void PictureWaveSynthAudioProcessorEditor::ModulationSlider::mouseWheelMove(const juce::MouseEvent& event,
+                                                                             const juce::MouseWheelDetails& wheel)
+{
+    juce::ignoreUnused(event);
+
+    const auto axis = std::abs(wheel.deltaY) > 0.0f ? wheel.deltaY : wheel.deltaX;
+    if (axis == 0.0f)
+    {
+        return;
+    }
+
+    auto step = getInterval();
+    if (step <= 0.0)
+    {
+        step = 1.0;
+    }
+
+    const auto direction = axis > 0.0f ? 1.0 : -1.0;
+    const auto nextValue = juce::jlimit(getMinimum(), getMaximum(), getValue() + direction * step);
+    setValue(nextValue, juce::sendNotificationSync);
+}
+
 void PictureWaveSynthAudioProcessorEditor::LfoVisualizer::setVisualState(float newPhase, float newDepth, int newWave, juce::Colour newAccent)
 {
     const auto clampedPhase = newPhase - std::floor(newPhase);
@@ -293,6 +315,31 @@ void PictureWaveSynthAudioProcessorEditor::ResettableComboBox::mouseDoubleClick(
     if (resetSelectedId > 0)
     {
         setSelectedId(resetSelectedId, juce::sendNotificationSync);
+    }
+}
+
+void PictureWaveSynthAudioProcessorEditor::ResettableComboBox::mouseWheelMove(const juce::MouseEvent& event,
+                                                                               const juce::MouseWheelDetails& wheel)
+{
+    juce::ignoreUnused(event);
+
+    const auto axis = std::abs(wheel.deltaY) > 0.0f ? wheel.deltaY : wheel.deltaX;
+    if (axis == 0.0f || getNumItems() <= 0)
+    {
+        return;
+    }
+
+    auto currentIndex = getSelectedItemIndex();
+    if (currentIndex < 0)
+    {
+        currentIndex = 0;
+    }
+
+    const auto direction = axis < 0.0f ? 1 : -1;
+    const auto nextIndex = juce::jlimit(0, getNumItems() - 1, currentIndex + direction);
+    if (nextIndex != currentIndex)
+    {
+        setSelectedItemIndex(nextIndex, juce::sendNotificationSync);
     }
 }
 
@@ -1036,6 +1083,11 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
         routeColumnHeaderDestination[static_cast<size_t>(pageIndex)].setColour(juce::Label::textColourId, juce::Colour::fromRGB(214, 219, 230));
         routeTabPages[static_cast<size_t>(pageIndex)].addAndMakeVisible(routeColumnHeaderDestination[static_cast<size_t>(pageIndex)]);
 
+        routeColumnHeaderBipolar[static_cast<size_t>(pageIndex)].setText("bip.", juce::dontSendNotification);
+        routeColumnHeaderBipolar[static_cast<size_t>(pageIndex)].setJustificationType(juce::Justification::centred);
+        routeColumnHeaderBipolar[static_cast<size_t>(pageIndex)].setColour(juce::Label::textColourId, juce::Colour::fromRGB(214, 219, 230));
+        routeTabPages[static_cast<size_t>(pageIndex)].addAndMakeVisible(routeColumnHeaderBipolar[static_cast<size_t>(pageIndex)]);
+
         routeColumnHeaderAmount[static_cast<size_t>(pageIndex)].setText("Modulation", juce::dontSendNotification);
         routeColumnHeaderAmount[static_cast<size_t>(pageIndex)].setJustificationType(juce::Justification::centredLeft);
         routeColumnHeaderAmount[static_cast<size_t>(pageIndex)].setColour(juce::Label::textColourId, juce::Colour::fromRGB(214, 219, 230));
@@ -1137,9 +1189,19 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
         modEnabledButtons[static_cast<size_t>(i)].setColour(juce::ToggleButton::textColourId, juce::Colour::fromRGB(214, 219, 230));
         page.addAndMakeVisible(modEnabledButtons[static_cast<size_t>(i)]);
 
-        for (int source = 1; source <= kNumLfos; ++source)
+        if (auto* sourceParam = dynamic_cast<juce::AudioParameterChoice*>(audioProcessor.parameters.getParameter("mod1Source")))
         {
-            modSourceCombos[static_cast<size_t>(i)].addItem("LFO " + juce::String(source), source);
+            for (int source = 0; source < sourceParam->choices.size(); ++source)
+            {
+                modSourceCombos[static_cast<size_t>(i)].addItem(sourceParam->choices[source], source + 1);
+            }
+        }
+        else
+        {
+            for (int source = 1; source <= kNumLfos; ++source)
+            {
+                modSourceCombos[static_cast<size_t>(i)].addItem("LFO " + juce::String(source), source);
+            }
         }
         page.addAndMakeVisible(modSourceCombos[static_cast<size_t>(i)]);
 
@@ -1148,6 +1210,9 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
             modTargetCombos[static_cast<size_t>(i)].addItem(kModTargetNames[static_cast<size_t>(target)], target + 1);
         }
         page.addAndMakeVisible(modTargetCombos[static_cast<size_t>(i)]);
+
+        modBipolarButtons[static_cast<size_t>(i)].setButtonText({});
+        page.addAndMakeVisible(modBipolarButtons[static_cast<size_t>(i)]);
 
         modAmountSliders[static_cast<size_t>(i)].setSliderStyle(juce::Slider::LinearHorizontal);
         modAmountSliders[static_cast<size_t>(i)].setTextBoxStyle(juce::Slider::TextBoxRight, false, 64, 20);
@@ -1162,6 +1227,7 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
         modEnabledAttachments[static_cast<size_t>(i)] = std::make_unique<ButtonAttachment>(audioProcessor.parameters, "mod" + idx + "Enabled", modEnabledButtons[static_cast<size_t>(i)]);
         modSourceAttachments[static_cast<size_t>(i)] = std::make_unique<ComboBoxAttachment>(audioProcessor.parameters, "mod" + idx + "Source", modSourceCombos[static_cast<size_t>(i)]);
         modTargetAttachments[static_cast<size_t>(i)] = std::make_unique<ComboBoxAttachment>(audioProcessor.parameters, "mod" + idx + "Target", modTargetCombos[static_cast<size_t>(i)]);
+        modBipolarAttachments[static_cast<size_t>(i)] = std::make_unique<ButtonAttachment>(audioProcessor.parameters, "mod" + idx + "Bipolar", modBipolarButtons[static_cast<size_t>(i)]);
         modAmountAttachments[static_cast<size_t>(i)] = std::make_unique<SliderAttachment>(audioProcessor.parameters, "mod" + idx + "Amount", modAmountSliders[static_cast<size_t>(i)]);
     }
 
@@ -1343,6 +1409,7 @@ void PictureWaveSynthAudioProcessorEditor::configureResetBehaviour()
         configureToggleReset(modEnabledButtons[static_cast<size_t>(i)], ("mod" + idx + "Enabled").toRawUTF8());
         configureComboReset(modSourceCombos[static_cast<size_t>(i)], ("mod" + idx + "Source").toRawUTF8());
         configureComboReset(modTargetCombos[static_cast<size_t>(i)], ("mod" + idx + "Target").toRawUTF8());
+        configureToggleReset(modBipolarButtons[static_cast<size_t>(i)], ("mod" + idx + "Bipolar").toRawUTF8());
         configureSliderReset(modAmountSliders[static_cast<size_t>(i)], ("mod" + idx + "Amount").toRawUTF8());
     }
 
@@ -1773,12 +1840,15 @@ void PictureWaveSynthAudioProcessorEditor::resized()
         const int sourceX = 130;
         const int sourceW = 90;
         const int targetX = 236;
-        const int targetW = juce::jmax(150, juce::jmin(220, pageW - 430));
-        const int amountX = 466;
+        const int targetW = juce::jmax(140, juce::jmin(210, pageW - 470));
+        const int bipX = targetX + targetW + 8;
+        const int bipW = 34;
+        const int amountX = bipX + bipW + 8;
         const int amountW = juce::jmax(150, pageW - amountX - 12);
 
         routeColumnHeaderSource[static_cast<size_t>(pageIndex)].setBounds(sourceX, headerY, sourceW, 18);
         routeColumnHeaderDestination[static_cast<size_t>(pageIndex)].setBounds(targetX, headerY, targetW, 18);
+        routeColumnHeaderBipolar[static_cast<size_t>(pageIndex)].setBounds(bipX, headerY, bipW, 18);
         routeColumnHeaderAmount[static_cast<size_t>(pageIndex)].setBounds(amountX, headerY, amountW, 18);
 
         for (int row = 0; row < kRoutesPerPage; ++row)
@@ -1789,6 +1859,7 @@ void PictureWaveSynthAudioProcessorEditor::resized()
             modEnabledButtons[static_cast<size_t>(routeIndex)].setBounds(onX, y + 4, onW, 22);
             modSourceCombos[static_cast<size_t>(routeIndex)].setBounds(sourceX, y + 3, sourceW, 24);
             modTargetCombos[static_cast<size_t>(routeIndex)].setBounds(targetX, y + 3, targetW, 24);
+            modBipolarButtons[static_cast<size_t>(routeIndex)].setBounds(bipX + 8, y + 6, 18, 18);
             modAmountSliders[static_cast<size_t>(routeIndex)].setBounds(amountX, y + 3, amountW, 24);
         }
     };

@@ -121,6 +121,7 @@ private:
         void setModulationVisual(float newAmount);
         void setEffectiveNormalisedValue(float newValue);
         void paintOverChildren(juce::Graphics& g) override;
+        void mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel) override;
 
     private:
         float modulationAmount = 0.0f;
@@ -148,6 +149,7 @@ private:
     public:
         using juce::ComboBox::ComboBox;
         void setResetSelectedId(int newSelectedId);
+        void mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel) override;
 
     private:
         void mouseDoubleClick(const juce::MouseEvent& event) override;
@@ -291,10 +293,11 @@ private:
     std::array<juce::Component, kNumRoutePages> routeTabPages;
     std::array<juce::Label, kNumRoutePages> routeColumnHeaderSource;
     std::array<juce::Label, kNumRoutePages> routeColumnHeaderDestination;
+    std::array<juce::Label, kNumRoutePages> routeColumnHeaderBipolar;
     std::array<juce::Label, kNumRoutePages> routeColumnHeaderAmount;
 
-    juce::Slider lfoRateSlider;
-    juce::Slider lfoDepthSlider;
+    ModulationSlider lfoRateSlider;
+    ModulationSlider lfoDepthSlider;
     ResettableComboBox lfoWaveCombo;
     ResettableToggleButton lfoSyncButton{ "Tempo Sync" };
     ResettableToggleButton lfoRandomPhasePerVoiceButton{ "Random Phase Per Voice" };
@@ -308,7 +311,8 @@ private:
     std::array<ResettableToggleButton, kNumModRows> modEnabledButtons{};
     std::array<ResettableComboBox, kNumModRows> modSourceCombos;
     std::array<ResettableComboBox, kNumModRows> modTargetCombos;
-    std::array<juce::Slider, kNumModRows> modAmountSliders{};
+    std::array<ResettableToggleButton, kNumModRows> modBipolarButtons{};
+    std::array<ModulationSlider, kNumModRows> modAmountSliders{};
     std::array<juce::Label, kNumModRows> modRowLabels{};
 
     std::unique_ptr<SliderAttachment> attackAttachment;
@@ -353,6 +357,7 @@ private:
     std::array<std::unique_ptr<ButtonAttachment>, kNumModRows> modEnabledAttachments;
     std::array<std::unique_ptr<ComboBoxAttachment>, kNumModRows> modSourceAttachments;
     std::array<std::unique_ptr<ComboBoxAttachment>, kNumModRows> modTargetAttachments;
+    std::array<std::unique_ptr<ButtonAttachment>, kNumModRows> modBipolarAttachments;
     std::array<std::unique_ptr<SliderAttachment>, kNumModRows> modAmountAttachments;
     int lastLfoTabIndex = -1;
 
