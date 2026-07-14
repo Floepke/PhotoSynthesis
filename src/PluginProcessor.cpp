@@ -1203,7 +1203,7 @@ PictureWaveSynthAudioProcessor::ParameterLayout PictureWaveSynthAudioProcessor::
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         "release", "Release", juce::NormalisableRange<float>(1.0f, 5000.0f, 1.0f), 300.0f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "gain", "Gain", juce::NormalisableRange<float>(-36.0f, 0.0f, 0.1f), -12.0f));
+        "gain", "Gain", juce::NormalisableRange<float>(-36.0f, 32.0f, 0.1f), -12.0f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         "noteDrift", "Note Drift", juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.1f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(

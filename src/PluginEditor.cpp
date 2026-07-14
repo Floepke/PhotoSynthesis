@@ -967,7 +967,9 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
     setupRotarySlider(decaySlider, "Decay (ms)");
     setupRotarySlider(sustainSlider, "Sustain");
     setupRotarySlider(releaseSlider, "Release (ms)");
-    setupRotarySlider(gainSlider, "Gain (dB)");
+    setupLinearSlider(gainSlider, "Gain (dB)");
+    gainSlider.setSliderStyle(juce::Slider::LinearVertical);
+    gainSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 70, 20);
     setupRotarySlider(noteDriftSlider, "Note Drift");
     setupRotarySlider(liveNoteDriftSlider, "Drift Freq");
 
@@ -997,6 +999,11 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
     mapRightGroup.setColour(juce::GroupComponent::outlineColourId, juce::Colour::fromRGB(65, 73, 88));
     mapRightGroup.setColour(juce::GroupComponent::textColourId, juce::Colour::fromRGB(231, 235, 242));
     addAndMakeVisible(mapRightGroup);
+
+    masterGroup.setText("Master");
+    masterGroup.setColour(juce::GroupComponent::outlineColourId, juce::Colour::fromRGB(65, 73, 88));
+    masterGroup.setColour(juce::GroupComponent::textColourId, juce::Colour::fromRGB(231, 235, 242));
+    addAndMakeVisible(masterGroup);
 
     attackAttachment = std::make_unique<SliderAttachment>(
         audioProcessor.parameters, "attack", attackSlider);
@@ -1671,13 +1678,22 @@ void PictureWaveSynthAudioProcessorEditor::resized()
     savePresetButton.setBounds(352, 56, 112, 26);
     imageStatusLabel.setBounds(24, 84, layoutWidth - 48, 22);
 
-    imagePreview.setBounds(24, 114, 760, 372);
+    const int masterGroupX = 24;
+    const int masterGroupY = 114;
+    const int masterGroupW = 108;
+    const int masterGroupH = 372;
+    masterGroup.setBounds(masterGroupX, masterGroupY, masterGroupW, masterGroupH);
+
+    gainSlider.setBounds(masterGroupX + 20, masterGroupY + 38, masterGroupW - 40, masterGroupH - 86);
+    gainLabel.setBounds(masterGroupX + 10, masterGroupY + masterGroupH - 36, masterGroupW - 20, 18);
+
+    imagePreview.setBounds(masterGroupX + masterGroupW + 10, 114, 644, 372);
 
     const int scannerKnobTop = 212;
     const int scannerKnobSize = 86;
     const int scannerKnobGap = 10;
     const int scannerRowStep = 108;
-    const int scannerStartX = 806;
+    const int scannerStartX = 796;
     const int scannerLabelOffset = 88;
     const auto scannerMode = scannerModeCombo.getSelectedId();
     const auto shapeBaseTop = scannerKnobTop;
@@ -1754,7 +1770,7 @@ void PictureWaveSynthAudioProcessorEditor::resized()
     const int perfLabelH = 18;
     const int perfInnerX = perfX + 12;
     const int perfInnerW = juce::jmax(280, perfW - 24);
-    const int controlCount = 7;
+    const int controlCount = 6;
     int knobW = 60;
     int knobGap = (perfInnerW - controlCount * knobW) / (controlCount - 1);
     if (knobGap < 4)
@@ -1782,9 +1798,8 @@ void PictureWaveSynthAudioProcessorEditor::resized()
     layoutPerfControl(1, decaySlider, decayLabel);
     layoutPerfControl(2, sustainSlider, sustainLabel);
     layoutPerfControl(3, releaseSlider, releaseLabel);
-    layoutPerfControl(4, gainSlider, gainLabel);
-    layoutPerfControl(5, noteDriftSlider, noteDriftLabel);
-    layoutPerfControl(6, liveNoteDriftSlider, liveNoteDriftLabel);
+    layoutPerfControl(4, noteDriftSlider, noteDriftLabel);
+    layoutPerfControl(5, liveNoteDriftSlider, liveNoteDriftLabel);
 
     modulationTitleLabel.setBounds(24, modulationTop + 12, 260, 22);
 

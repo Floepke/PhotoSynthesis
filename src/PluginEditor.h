@@ -275,6 +275,7 @@ private:
 
     juce::GroupComponent mapLeftGroup;
     juce::GroupComponent mapRightGroup;
+    juce::GroupComponent masterGroup;
 
     juce::Label uiZoomLabel;
     ResettableComboBox uiZoomCombo;
