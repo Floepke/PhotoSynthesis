@@ -120,12 +120,14 @@ private:
     public:
         void setModulationVisual(float newAmount);
         void setEffectiveNormalisedValue(float newValue);
+        void setMappingOverlayEnabled(bool shouldEnable) { mappingOverlayEnabled = shouldEnable; }
         void paintOverChildren(juce::Graphics& g) override;
         void mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel) override;
 
     private:
         float modulationAmount = 0.0f;
         float effectiveNormalisedValue = 0.5f;
+        bool mappingOverlayEnabled = false;
     };
 
     class LfoVisualizer final : public juce::Component
@@ -277,6 +279,11 @@ private:
     juce::GroupComponent mapRightGroup;
     juce::GroupComponent masterGroup;
 
+    juce::TabbedComponent scannerTabs{ juce::TabbedButtonBar::TabsAtTop };
+    juce::Component photoScannerTabPage;
+    juce::Component fxTabPage;
+    juce::Label fxPlaceholderLabel;
+
     juce::Label uiZoomLabel;
     ResettableComboBox uiZoomCombo;
     juce::Label polyphonyLabel;
@@ -284,6 +291,8 @@ private:
     juce::Label modulationTitleLabel;
     juce::GroupComponent modulationLfoGroup;
     juce::GroupComponent modulationRoutingGroup;
+    ModulationSlider modResponseSlider;
+    juce::Label modResponseLabel;
 
     LfoTabbedComponent lfoTabs{ juce::TabbedButtonBar::TabsAtTop };
     juce::Component lfoTabPage;
@@ -292,6 +301,7 @@ private:
     static constexpr int kNumRoutePages = 4;
     static constexpr int kRoutesPerPage = 8;
     std::array<juce::Component, kNumRoutePages> routeTabPages;
+    juce::Component routeSettingsTabPage;
     std::array<juce::Label, kNumRoutePages> routeColumnHeaderSource;
     std::array<juce::Label, kNumRoutePages> routeColumnHeaderDestination;
     std::array<juce::Label, kNumRoutePages> routeColumnHeaderBipolar;
@@ -360,6 +370,7 @@ private:
     std::array<std::unique_ptr<ComboBoxAttachment>, kNumModRows> modTargetAttachments;
     std::array<std::unique_ptr<ButtonAttachment>, kNumModRows> modBipolarAttachments;
     std::array<std::unique_ptr<SliderAttachment>, kNumModRows> modAmountAttachments;
+    std::unique_ptr<SliderAttachment> modResponseAttachment;
     int lastLfoTabIndex = -1;
 
     std::unique_ptr<juce::FileChooser> imageChooser;

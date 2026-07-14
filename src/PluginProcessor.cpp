@@ -162,6 +162,7 @@ bool SineWaveVoice::canPlaySound(juce::SynthesiserSound* sound)
 
 void SineWaveVoice::startNote(int midiNoteNumber, float velocity, juce::SynthesiserSound*, int)
 {
+    noteOnVelocity = juce::jlimit(0.0f, 1.0f, velocity);
     level = velocity * 0.2f;
     const auto baseFrequency = juce::MidiMessage::getMidiNoteInHertz(midiNoteNumber);
     phaseDelta = baseFrequency / currentSampleRate;
@@ -410,6 +411,11 @@ uint32_t SineWaveVoice::getRandomModulationSeed() const
 {
     return randomModulationSeed;
 }
+
+float SineWaveVoice::getNoteOnVelocity() const
+{
+    return noteOnVelocity;
+}
     
     void SineWaveVoice::forceStop()
     {
@@ -435,6 +441,11 @@ PictureWaveSynthAudioProcessor::PictureWaveSynthAudioProcessor()
 
     perVoiceWaveTableLeft.resize(static_cast<size_t>(kMaxVoices));
     perVoiceWaveTableRight.resize(static_cast<size_t>(kMaxVoices));
+    perVoiceSmoothedModulationSums.resize(static_cast<size_t>(kMaxVoices));
+    for (auto& sums : perVoiceSmoothedModulationSums)
+    {
+        sums.fill(0.0f);
+    }
     perVoiceLastScannerParams.resize(static_cast<size_t>(kMaxVoices));
     perVoiceLastPropellorPhase.resize(static_cast<size_t>(kMaxVoices), 0.0);
     perVoiceHasCachedScannerState.resize(static_cast<size_t>(kMaxVoices), false);
@@ -474,6 +485,12 @@ void PictureWaveSynthAudioProcessor::prepareToPlay(double sampleRate, int sample
     modulationModWheel = 0.0f;
     heldNoteCount = 0;
     modulationPreviewSeed = static_cast<uint32_t>(juce::Random::getSystemRandom().nextInt());
+    smoothedModulationSums.fill(0.0f);
+    smoothedPreviewModulationSums.fill(0.0f);
+    for (auto& sums : perVoiceSmoothedModulationSums)
+    {
+        sums.fill(0.0f);
+    }
 
     for (auto* voice : voices)
     {
@@ -494,6 +511,12 @@ void PictureWaveSynthAudioProcessor::releaseResources()
     for (auto& value : effectiveDisplayValues)
     {
         value.store(0.0f);
+    }
+    smoothedModulationSums.fill(0.0f);
+    smoothedPreviewModulationSums.fill(0.0f);
+    for (auto& sums : perVoiceSmoothedModulationSums)
+    {
+        sums.fill(0.0f);
     }
 }
 
@@ -536,11 +559,6 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
         {
             modulationModWheel = juce::jlimit(0.0f, 1.0f, static_cast<float>(message.getControllerValue()) / 127.0f);
         }
-    }
-
-    if (heldNoteCount <= 0)
-    {
-        modulationVelocity = 0.0f;
     }
 
     const std::array<int, 6> polyphonyChoices{ 4, 8, 12, 16, 24, 32 };
@@ -617,6 +635,27 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
     std::array<ModRouteState, kNumModRoutes> routes{};
     std::array<float, kModTargetParamIds.size()> modulationSums{};
     modulationSums.fill(0.0f);
+    const auto responseMs = juce::jlimit(0.0f, 500.0f, parameters.getRawParameterValue("modResponseMs")->load());
+    const auto responseSeconds = static_cast<double>(responseMs) * 0.001;
+    const auto blockDurationSeconds = getSampleRate() > 0.0 ? static_cast<double>(buffer.getNumSamples()) / getSampleRate() : 0.0;
+    const auto smoothingAlpha = (responseSeconds <= 0.0 || blockDurationSeconds <= 0.0)
+        ? 1.0f
+        : static_cast<float>(1.0 - std::exp(-blockDurationSeconds / responseSeconds));
+
+    const auto applySmoothingToSums = [smoothingAlpha](const std::array<float, kNumModTargets>& input,
+                                                       std::array<float, kNumModTargets>& state)
+    {
+        if (smoothingAlpha >= 1.0f)
+        {
+            state = input;
+            return;
+        }
+
+        for (size_t i = 0; i < state.size(); ++i)
+        {
+            state[i] += (input[i] - state[i]) * smoothingAlpha;
+        }
+    };
     const auto sourceValueForIndex = [this, &lfoValues](int sourceIndex)
     {
         if (sourceIndex >= 0 && sourceIndex < kNumLfos)
@@ -679,7 +718,8 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
         routeState.usesPerVoiceVariation = routeState.usesRandomWave
             || (routeState.source < kNumLfos
                 && lfoRandomPhasePerVoice[static_cast<size_t>(routeState.source)]
-                && !routeState.usesRandomWave);
+                && !routeState.usesRandomWave)
+            || routeState.source == StandardModSource::velocity;
 
         if (routeState.target <= 0)
         {
@@ -696,12 +736,14 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
         modulationSums[static_cast<size_t>(targetIndex)] += routeState.amount * sourceValue;
     }
 
-    for (size_t i = 0; i < modulationSums.size(); ++i)
+    applySmoothingToSums(modulationSums, smoothedModulationSums);
+
+    for (size_t i = 0; i < smoothedModulationSums.size(); ++i)
     {
-        modulationDisplayValues[i].store(modulationSums[i]);
+        modulationDisplayValues[i].store(smoothedModulationSums[i]);
     }
 
-    const auto readParam = [this, &modulationSums](const char* paramId, bool storeEffective)
+    const auto readParam = [this](const char* paramId, bool storeEffective)
     {
         auto* param = parameters.getParameter(paramId);
         auto* raw = parameters.getRawParameterValue(paramId);
@@ -717,7 +759,7 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
         }
 
         const auto baseNorm = param->getValue();
-        const auto modNorm = juce::jlimit(0.0f, 1.0f, baseNorm + modulationSums[static_cast<size_t>(targetIndex)]);
+        const auto modNorm = juce::jlimit(0.0f, 1.0f, baseNorm + this->smoothedModulationSums[static_cast<size_t>(targetIndex)]);
         const auto actualValue = param->convertFrom0to1(modNorm);
         if (storeEffective)
         {
@@ -853,14 +895,16 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
             previewModulationSums[static_cast<size_t>(targetIndex)] += route.amount * sourceValue;
         }
 
+        applySmoothingToSums(previewModulationSums, smoothedPreviewModulationSums);
+
         for (size_t targetIndex = 0; targetIndex < kModTargetParamIds.size(); ++targetIndex)
         {
-            modulationDisplayValues[targetIndex].store(previewModulationSums[targetIndex]);
+            modulationDisplayValues[targetIndex].store(smoothedPreviewModulationSums[targetIndex]);
             auto* param = parameters.getParameter(kModTargetParamIds[targetIndex]);
             if (param != nullptr)
             {
                 const auto actualValue = param->convertFrom0to1(
-                    juce::jlimit(0.0f, 1.0f, param->getValue() + previewModulationSums[targetIndex]));
+                    juce::jlimit(0.0f, 1.0f, param->getValue() + smoothedPreviewModulationSums[targetIndex]));
                 effectiveDisplayValues[targetIndex].store(actualValue);
             }
         }
@@ -878,7 +922,7 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
                 continue;
             }
 
-            std::array<float, kModTargetParamIds.size()> voiceModulationSums = modulationSums;
+            std::array<float, kModTargetParamIds.size()> voiceModulationSums = smoothedModulationSums;
             if (hasPerVoiceVariableRoutes)
             {
                 voiceModulationSums.fill(0.0f);
@@ -890,6 +934,10 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
                     }
 
                     auto sourceValue = sourceValueForIndex(route.source);
+                    if (route.source == StandardModSource::velocity)
+                    {
+                        sourceValue = voice->getNoteOnVelocity();
+                    }
                     if (route.source < kNumLfos && route.usesRandomWave)
                     {
                         sourceValue = renderExtendedLfoSample(
@@ -921,6 +969,12 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
                     }
 
                     voiceModulationSums[static_cast<size_t>(targetIndex)] += route.amount * sourceValue;
+                }
+
+                if (static_cast<size_t>(i) < perVoiceSmoothedModulationSums.size())
+                {
+                    applySmoothingToSums(voiceModulationSums, perVoiceSmoothedModulationSums[static_cast<size_t>(i)]);
+                    voiceModulationSums = perVoiceSmoothedModulationSums[static_cast<size_t>(i)];
                 }
             }
 
@@ -1210,6 +1264,8 @@ PictureWaveSynthAudioProcessor::ParameterLayout PictureWaveSynthAudioProcessor::
         "liveNoteDrift", "Drift Freq", juce::NormalisableRange<float>(0.0f, 12.0f, 0.01f), 2.0f));
     params.push_back(std::make_unique<juce::AudioParameterChoice>(
         "maxVoices", "Polyphony", juce::StringArray{ "4", "8", "12", "16", "24", "32" }, 3));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        "modResponseMs", "Mod Response", juce::NormalisableRange<float>(0.0f, 500.0f, 0.1f), 25.0f));
 
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         "scanX", "Line X", juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.5f));

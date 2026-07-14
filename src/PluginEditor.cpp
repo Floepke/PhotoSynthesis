@@ -136,17 +136,24 @@ void PictureWaveSynthAudioProcessorEditor::ModulationSlider::paintOverChildren(j
     if (getSliderStyle() == juce::Slider::LinearVertical)
     {
         const auto accent = findColour(juce::Slider::thumbColourId).withAlpha(0.95f);
-        const auto centerY = area.getBottom() - area.getHeight() * 0.5f;
         const auto markerY = area.getBottom() - area.getHeight() * effectiveNormalisedValue;
-        const auto fillTop = juce::jmin(centerY, markerY);
-        const auto fillHeight = juce::jmax(2.0f, std::abs(markerY - centerY));
-
         g.setColour(juce::Colours::white.withAlpha(0.08f));
         g.fillRoundedRectangle(area.getRight() - 4.0f, area.getY(), 4.0f, area.getHeight(), 2.0f);
-        g.fillRoundedRectangle(area.getX() + 1.0f, centerY - 1.5f, area.getWidth() - 2.0f, 3.0f, 1.5f);
 
-        g.setColour(accent);
-        g.fillRoundedRectangle(area.getX() + 1.0f, fillTop - 1.5f, area.getWidth() - 2.0f, fillHeight + 3.0f, 2.0f);
+        if (mappingOverlayEnabled)
+        {
+            const auto centerY = area.getBottom() - area.getHeight() * 0.5f;
+            const auto fillTop = juce::jmin(centerY, markerY);
+            const auto fillHeight = juce::jmax(2.0f, std::abs(markerY - centerY));
+            g.fillRoundedRectangle(area.getX() + 1.0f, centerY - 1.5f, area.getWidth() - 2.0f, 3.0f, 1.5f);
+            g.setColour(accent);
+            g.fillRoundedRectangle(area.getX() + 1.0f, fillTop - 1.5f, area.getWidth() - 2.0f, fillHeight + 3.0f, 2.0f);
+        }
+        else
+        {
+            g.setColour(accent);
+            g.fillRoundedRectangle(area.getX() + 1.0f, markerY - 1.5f, area.getWidth() - 2.0f, 3.0f, 1.5f);
+        }
     }
     else
     {
@@ -896,6 +903,16 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
     setupSectionLabel(mappingTitleLabel, "RGBA Mapping to Stereo (+/-)");
     setupSectionLabel(envTitleLabel, "Performance");
 
+    addAndMakeVisible(scannerTabs);
+    scannerTabs.addTab("Photo Scanner", juce::Colour::fromRGB(44, 50, 62), &photoScannerTabPage, false);
+    scannerTabs.addTab("FX", juce::Colour::fromRGB(44, 50, 62), &fxTabPage, false);
+    scannerTabs.setCurrentTabIndex(0);
+
+    fxPlaceholderLabel.setText("FX page (coming soon)", juce::dontSendNotification);
+    fxPlaceholderLabel.setJustificationType(juce::Justification::centred);
+    fxPlaceholderLabel.setColour(juce::Label::textColourId, juce::Colour::fromRGB(203, 210, 222));
+    fxTabPage.addAndMakeVisible(fxPlaceholderLabel);
+
     loadImageButton.onClick = [this] { openImageChooser(); };
     initButton.onClick = [this]
     {
@@ -963,15 +980,28 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
     setupModeSpecificSlider(shapeCtrl5Slider, shapeCtrl5Label);
     setupModeSpecificSlider(shapeCtrl6Slider, shapeCtrl6Label);
 
-    setupRotarySlider(attackSlider, "Attack (ms)");
-    setupRotarySlider(decaySlider, "Decay (ms)");
-    setupRotarySlider(sustainSlider, "Sustain");
-    setupRotarySlider(releaseSlider, "Release (ms)");
+    setupLinearSlider(attackSlider, "Attack (ms)");
+    setupLinearSlider(decaySlider, "Decay (ms)");
+    setupLinearSlider(sustainSlider, "Sustain");
+    setupLinearSlider(releaseSlider, "Release (ms)");
     setupLinearSlider(gainSlider, "Gain (dB)");
     gainSlider.setSliderStyle(juce::Slider::LinearVertical);
     gainSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 70, 20);
-    setupRotarySlider(noteDriftSlider, "Note Drift");
-    setupRotarySlider(liveNoteDriftSlider, "Drift Freq");
+    setupLinearSlider(noteDriftSlider, "Note Drift");
+    setupLinearSlider(liveNoteDriftSlider, "Drift Freq");
+
+    attackSlider.setSliderStyle(juce::Slider::LinearVertical);
+    attackSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 70, 20);
+    decaySlider.setSliderStyle(juce::Slider::LinearVertical);
+    decaySlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 70, 20);
+    sustainSlider.setSliderStyle(juce::Slider::LinearVertical);
+    sustainSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 70, 20);
+    releaseSlider.setSliderStyle(juce::Slider::LinearVertical);
+    releaseSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 70, 20);
+    noteDriftSlider.setSliderStyle(juce::Slider::LinearVertical);
+    noteDriftSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 70, 20);
+    liveNoteDriftSlider.setSliderStyle(juce::Slider::LinearVertical);
+    liveNoteDriftSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 70, 20);
 
     setupSmallLabel(attackLabel, "Attack");
     setupSmallLabel(decayLabel, "Decay");
@@ -1078,6 +1108,14 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
     modulationRoutingGroup.setColour(juce::GroupComponent::textColourId, juce::Colour::fromRGB(231, 235, 242));
     addAndMakeVisible(modulationRoutingGroup);
 
+    modResponseLabel.setText("Response", juce::dontSendNotification);
+    modResponseLabel.setJustificationType(juce::Justification::centredLeft);
+    modResponseLabel.setColour(juce::Label::textColourId, juce::Colour::fromRGB(214, 219, 230));
+    routeSettingsTabPage.addAndMakeVisible(modResponseLabel);
+    modResponseSlider.setSliderStyle(juce::Slider::LinearHorizontal);
+    modResponseSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 62, 20);
+    routeSettingsTabPage.addAndMakeVisible(modResponseSlider);
+
     for (int pageIndex = 0; pageIndex < kNumRoutePages; ++pageIndex)
     {
         routeColumnHeaderSource[static_cast<size_t>(pageIndex)].setText("Source", juce::dontSendNotification);
@@ -1114,7 +1152,7 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
     uiZoomCombo.onChange = [this] { applyUiZoomSelection(); };
     addAndMakeVisible(uiZoomCombo);
 
-    polyphonyLabel.setText("Poly", juce::dontSendNotification);
+    polyphonyLabel.setText("Polyphony", juce::dontSendNotification);
     polyphonyLabel.setJustificationType(juce::Justification::centredRight);
     polyphonyLabel.setColour(juce::Label::textColourId, juce::Colour::fromRGB(214, 219, 230));
     addAndMakeVisible(polyphonyLabel);
@@ -1127,6 +1165,8 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
     addAndMakeVisible(polyphonyCombo);
     polyphonyAttachment = std::make_unique<ComboBoxAttachment>(
         audioProcessor.parameters, "maxVoices", polyphonyCombo);
+    modResponseAttachment = std::make_unique<SliderAttachment>(
+        audioProcessor.parameters, "modResponseMs", modResponseSlider);
 
     addAndMakeVisible(lfoTabs);
     for (int i = 0; i < kNumLfos; ++i)
@@ -1148,6 +1188,7 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
     routeTabs.addTab("Route 9-16", juce::Colour::fromRGB(44, 50, 62), &routeTabPages[1], false);
     routeTabs.addTab("Route 17-24", juce::Colour::fromRGB(44, 50, 62), &routeTabPages[2], false);
     routeTabs.addTab("Route 25-32", juce::Colour::fromRGB(44, 50, 62), &routeTabPages[3], false);
+    routeTabs.addTab("Routing Settings", juce::Colour::fromRGB(44, 50, 62), &routeSettingsTabPage, false);
 
     setupRotarySlider(lfoRateSlider, "LFO Rate");
     setupRotarySlider(lfoDepthSlider, "LFO Depth");
@@ -1238,6 +1279,48 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
         modAmountAttachments[static_cast<size_t>(i)] = std::make_unique<SliderAttachment>(audioProcessor.parameters, "mod" + idx + "Amount", modAmountSliders[static_cast<size_t>(i)]);
     }
 
+    auto addToPhotoScannerPage = [this](juce::Component& component)
+    {
+        photoScannerTabPage.addAndMakeVisible(component);
+    };
+
+    addToPhotoScannerPage(scannerTitleLabel);
+    addToPhotoScannerPage(loadImageButton);
+    addToPhotoScannerPage(initButton);
+    addToPhotoScannerPage(loadPresetButton);
+    addToPhotoScannerPage(savePresetButton);
+    addToPhotoScannerPage(imageStatusLabel);
+    addToPhotoScannerPage(imagePreview);
+
+    addToPhotoScannerPage(scannerModeLabel);
+    addToPhotoScannerPage(scannerModeCombo);
+    addToPhotoScannerPage(scanResolutionLabel);
+    addToPhotoScannerPage(scanResolutionCombo);
+    addToPhotoScannerPage(randomPhaseButton);
+    addToPhotoScannerPage(propTempoSyncButton);
+
+    addToPhotoScannerPage(scanXSlider);
+    addToPhotoScannerPage(scanYSlider);
+    addToPhotoScannerPage(scanLengthSlider);
+    addToPhotoScannerPage(scanAngleSlider);
+    addToPhotoScannerPage(scanXLabel);
+    addToPhotoScannerPage(scanYLabel);
+    addToPhotoScannerPage(scanLengthLabel);
+    addToPhotoScannerPage(scanAngleLabel);
+
+    addToPhotoScannerPage(shapeCtrl1Slider);
+    addToPhotoScannerPage(shapeCtrl2Slider);
+    addToPhotoScannerPage(shapeCtrl3Slider);
+    addToPhotoScannerPage(shapeCtrl4Slider);
+    addToPhotoScannerPage(shapeCtrl5Slider);
+    addToPhotoScannerPage(shapeCtrl6Slider);
+    addToPhotoScannerPage(shapeCtrl1Label);
+    addToPhotoScannerPage(shapeCtrl2Label);
+    addToPhotoScannerPage(shapeCtrl3Label);
+    addToPhotoScannerPage(shapeCtrl4Label);
+    addToPhotoScannerPage(shapeCtrl5Label);
+    addToPhotoScannerPage(shapeCtrl6Label);
+
     updateModeControlLabelsAndVisibility();
 
     if (scannerModeCombo.getSelectedId() == 0)
@@ -1321,6 +1404,10 @@ void PictureWaveSynthAudioProcessorEditor::setupScannerSlider(juce::Slider& slid
 void PictureWaveSynthAudioProcessorEditor::setupMappingSlider(juce::Slider& slider, juce::Label& label, const juce::String& name)
 {
     setupBipolarSlider(slider, name);
+    if (auto* modulationSlider = dynamic_cast<ModulationSlider*>(&slider))
+    {
+        modulationSlider->setMappingOverlayEnabled(true);
+    }
     if (name.startsWithIgnoreCase("R"))
     {
         slider.setColour(juce::Slider::thumbColourId, juce::Colour::fromRGB(230, 74, 74));
@@ -1400,6 +1487,7 @@ void PictureWaveSynthAudioProcessorEditor::configureResetBehaviour()
     configureSliderReset(mapGRSlider, "mapGR");
     configureSliderReset(mapBRSlider, "mapBR");
     configureSliderReset(mapARSlider, "mapAR");
+    configureSliderReset(modResponseSlider, "modResponseMs");
 
     configureComboReset(scannerModeCombo, "scannerMode");
     configureComboReset(scanResolutionCombo, "scanResolution");
@@ -1671,39 +1759,53 @@ void PictureWaveSynthAudioProcessorEditor::resized()
 
     titleLabel.setBounds(0, 10, layoutWidth, 30);
 
-    scannerTitleLabel.setBounds(24, 58, 240, 22);
-    loadImageButton.setBounds(24, 56, 112, 26);
-    initButton.setBounds(144, 56, 80, 26);
-    loadPresetButton.setBounds(232, 56, 112, 26);
-    savePresetButton.setBounds(352, 56, 112, 26);
-    imageStatusLabel.setBounds(24, 84, layoutWidth - 48, 22);
-
+    const int topPanelY = 84;
+    const int topPanelH = 402;
     const int masterGroupX = 24;
-    const int masterGroupY = 114;
     const int masterGroupW = 108;
-    const int masterGroupH = 372;
-    masterGroup.setBounds(masterGroupX, masterGroupY, masterGroupW, masterGroupH);
+    masterGroup.setBounds(masterGroupX, topPanelY, masterGroupW, topPanelH);
+    gainSlider.setBounds(masterGroupX + 20, topPanelY + 38, masterGroupW - 40, topPanelH - 86);
+    gainLabel.setBounds(masterGroupX + 10, topPanelY + topPanelH - 36, masterGroupW - 20, 18);
 
-    gainSlider.setBounds(masterGroupX + 20, masterGroupY + 38, masterGroupW - 40, masterGroupH - 86);
-    gainLabel.setBounds(masterGroupX + 10, masterGroupY + masterGroupH - 36, masterGroupW - 20, 18);
+    const int scannerTabsX = masterGroupX + masterGroupW + 10;
+    const int scannerTabsW = layoutWidth - scannerTabsX - 24;
+    scannerTabs.setBounds(scannerTabsX, topPanelY, scannerTabsW, topPanelH);
 
-    imagePreview.setBounds(masterGroupX + masterGroupW + 10, 114, 644, 372);
+    const int pagePad = 10;
+    const int buttonY = 6;
+    scannerTitleLabel.setBounds(pagePad, buttonY + 2, 160, 22);
+    loadImageButton.setBounds(pagePad + 166, buttonY, 112, 26);
+    initButton.setBounds(pagePad + 286, buttonY, 80, 26);
+    loadPresetButton.setBounds(pagePad + 374, buttonY, 112, 26);
+    savePresetButton.setBounds(pagePad + 494, buttonY, 112, 26);
 
-    const int scannerKnobTop = 212;
-    const int scannerKnobSize = 86;
-    const int scannerKnobGap = 10;
-    const int scannerRowStep = 108;
-    const int scannerStartX = 796;
-    const int scannerLabelOffset = 88;
-    const auto scannerMode = scannerModeCombo.getSelectedId();
-    const auto shapeBaseTop = scannerKnobTop;
+    const auto photoW = photoScannerTabPage.getWidth();
+    const auto photoH = photoScannerTabPage.getHeight();
+    imageStatusLabel.setBounds(pagePad, 34, juce::jmax(200, photoW - 2 * pagePad), 22);
 
-    scannerModeLabel.setBounds(scannerStartX, 118, 120, 22);
-    scannerModeCombo.setBounds(scannerStartX + 126, 118, 230, 26);
-    scanResolutionLabel.setBounds(scannerStartX, 146, 120, 22);
-    scanResolutionCombo.setBounds(scannerStartX + 126, 146, 120, 26);
-    randomPhaseButton.setBounds(scannerStartX, 178, 180, 22);
-    propTempoSyncButton.setBounds(scannerStartX + 190, 178, 130, 22);
+    const int imageTop = 60;
+    const int imageX = pagePad;
+    const int imageH = juce::jmax(200, photoH - imageTop - pagePad);
+    const int imageW = juce::jlimit(380, 650, photoW - 360);
+    imagePreview.setBounds(imageX, imageTop, imageW, imageH);
+
+    const int scannerStartX = imageX + imageW + 12;
+    const int scannerLabelW = 114;
+    const int scannerComboW = juce::jmax(110, photoW - scannerStartX - scannerLabelW - pagePad);
+    scannerModeLabel.setBounds(scannerStartX, 60, scannerLabelW, 22);
+    scannerModeCombo.setBounds(scannerStartX + scannerLabelW, 60, scannerComboW, 26);
+    scanResolutionLabel.setBounds(scannerStartX, 88, scannerLabelW, 22);
+    scanResolutionCombo.setBounds(scannerStartX + scannerLabelW, 88, juce::jmin(140, scannerComboW), 26);
+    randomPhaseButton.setBounds(scannerStartX, 120, juce::jmin(180, scannerComboW + scannerLabelW), 22);
+    propTempoSyncButton.setBounds(scannerStartX + 190, 120, juce::jmin(130, juce::jmax(100, photoW - scannerStartX - 190 - pagePad)), 22);
+
+    const int scannerKnobTop = 146;
+    const int scannerKnobGap = 8;
+    const int scannerKnobAreaW = juce::jmax(220, photoW - scannerStartX - pagePad);
+    const int scannerKnobSize = juce::jlimit(58, 76, (scannerKnobAreaW - scannerKnobGap * 3) / 4);
+    const int scannerLabelOffset = scannerKnobSize + 2;
+    const int scannerRowStep = scannerKnobSize + 22;
+    const int shapeBaseTop = scannerKnobTop;
 
     scanXSlider.setBounds(scannerStartX + 0 * (scannerKnobSize + scannerKnobGap), scannerKnobTop, scannerKnobSize, scannerKnobSize);
     scanYSlider.setBounds(scannerStartX + 1 * (scannerKnobSize + scannerKnobGap), scannerKnobTop, scannerKnobSize, scannerKnobSize);
@@ -1728,6 +1830,8 @@ void PictureWaveSynthAudioProcessorEditor::resized()
     shapeCtrl4Label.setBounds(scannerStartX + 0 * (scannerKnobSize + scannerKnobGap), shapeBaseTop + scannerRowStep + scannerLabelOffset, scannerKnobSize, 18);
     shapeCtrl5Label.setBounds(scannerStartX + 1 * (scannerKnobSize + scannerKnobGap), shapeBaseTop + scannerRowStep + scannerLabelOffset, scannerKnobSize, 18);
     shapeCtrl6Label.setBounds(scannerStartX + 2 * (scannerKnobSize + scannerKnobGap), shapeBaseTop + scannerRowStep + scannerLabelOffset, scannerKnobSize, 18);
+
+    fxPlaceholderLabel.setBounds(20, 18, juce::jmax(220, fxTabPage.getWidth() - 40), juce::jmax(100, fxTabPage.getHeight() - 36));
 
     constexpr int kMidPanelLeftX = 12;
     constexpr int kMapPanelWidth = 698;
@@ -1840,6 +1944,9 @@ void PictureWaveSynthAudioProcessorEditor::resized()
 
     routeTabs.setBounds(routingGroupX + 14, lfoGroupY + 40, routingGroupW - 28, routingGroupH - 50);
 
+    modResponseLabel.setBounds(14, 16, 84, 22);
+    modResponseSlider.setBounds(102, 16, juce::jmax(220, routeSettingsTabPage.getWidth() - 178), 22);
+
     const auto layoutRoutePage = [&](int pageIndex)
     {
         auto& page = routeTabPages[static_cast<size_t>(pageIndex)];
@@ -1884,10 +1991,10 @@ void PictureWaveSynthAudioProcessorEditor::resized()
         layoutRoutePage(pageIndex);
     }
 
-    polyphonyLabel.setBounds(520, 56, 50, 22);
-    polyphonyCombo.setBounds(576, 56, 66, 24);
-    uiZoomLabel.setBounds(660, 56, 74, 22);
-    uiZoomCombo.setBounds(740, 56, 96, 24);
+    polyphonyLabel.setBounds(24, 56, 90, 22);
+    polyphonyCombo.setBounds(118, 56, 66, 24);
+    uiZoomLabel.setBounds(198, 56, 74, 22);
+    uiZoomCombo.setBounds(278, 56, 96, 24);
 
     storeEditorGeometryToState();
 }

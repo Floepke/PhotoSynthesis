@@ -36,6 +36,7 @@ public:
     void setLiveNoteDriftRateHz(float rateHz);
     double getPropellorPhaseOffset() const;
     uint32_t getRandomModulationSeed() const;
+    float getNoteOnVelocity() const;
     void forceStop();
 
 private:
@@ -58,6 +59,7 @@ private:
     int driftSegmentProgress = 0;
     float propellorPhaseOffset = 0.0f;
     uint32_t randomModulationSeed = 0;
+    float noteOnVelocity = 0.0f;
     bool randomPropellorPhaseEnabled = false;
     bool retriggeringFromSteal = false;
 };
@@ -199,6 +201,7 @@ private:
     std::array<float, kWaveTableSize> waveTableRight{};
     std::vector<std::array<float, kWaveTableSize>> perVoiceWaveTableLeft;
     std::vector<std::array<float, kWaveTableSize>> perVoiceWaveTableRight;
+    std::vector<std::array<float, kNumModTargets>> perVoiceSmoothedModulationSums;
     std::vector<ScannerParams> perVoiceLastScannerParams;
     std::vector<double> perVoiceLastPropellorPhase;
     std::vector<bool> perVoiceHasCachedScannerState;
@@ -206,6 +209,8 @@ private:
     std::array<int64_t, 8> lfoCyclePositions{};
     std::array<std::atomic<float>, kNumModTargets> modulationDisplayValues{};
     std::array<std::atomic<float>, kNumModTargets> effectiveDisplayValues{};
+    std::array<float, kNumModTargets> smoothedModulationSums{};
+    std::array<float, kNumModTargets> smoothedPreviewModulationSums{};
     std::atomic<bool> waveTableDirty{ true };
     std::atomic<double> propellorPhase { 0.0 };
     juce::MemoryBlock initialStateWithoutImage;
