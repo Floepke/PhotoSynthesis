@@ -1176,6 +1176,8 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
     polyphonyCombo.addItem("16", 4);
     polyphonyCombo.addItem("24", 5);
     polyphonyCombo.addItem("32", 6);
+    polyphonyCombo.addItem("48", 7);
+    polyphonyCombo.addItem("64", 8);
     addAndMakeVisible(polyphonyCombo);
     polyphonyAttachment = std::make_unique<ComboBoxAttachment>(
         audioProcessor.parameters, "maxVoices", polyphonyCombo);

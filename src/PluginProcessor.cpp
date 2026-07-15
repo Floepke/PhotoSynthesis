@@ -7,7 +7,7 @@
 
 namespace
 {
-constexpr int kMaxVoices = 32;
+constexpr int kMaxVoices = 64;
 constexpr const char* kEmbeddedImageTag = "EMBEDDED_IMAGE";
 constexpr const char* kEmbeddedImageEncoding = "base64-png";
 constexpr uint32_t kStateMagic = 0x50575331; // PWS1
@@ -561,7 +561,7 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
         }
     }
 
-    const std::array<int, 6> polyphonyChoices{ 4, 8, 12, 16, 24, 32 };
+    const std::array<int, 8> polyphonyChoices{ 4, 8, 12, 16, 24, 32, 48, 64 };
     const auto polyChoiceIndex = juce::jlimit(0, static_cast<int>(polyphonyChoices.size()) - 1,
                                               static_cast<int>(std::lround(parameters.getRawParameterValue("maxVoices")->load())));
     const auto maxVoices = polyphonyChoices[static_cast<size_t>(polyChoiceIndex)];
@@ -1263,7 +1263,7 @@ PictureWaveSynthAudioProcessor::ParameterLayout PictureWaveSynthAudioProcessor::
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         "liveNoteDrift", "Drift Freq", juce::NormalisableRange<float>(0.0f, 12.0f, 0.01f), 2.0f));
     params.push_back(std::make_unique<juce::AudioParameterChoice>(
-        "maxVoices", "Polyphony", juce::StringArray{ "4", "8", "12", "16", "24", "32" }, 3));
+        "maxVoices", "Polyphony", juce::StringArray{ "4", "8", "12", "16", "24", "32", "48", "64" }, 3));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         "modResponseMs", "Mod Response", juce::NormalisableRange<float>(0.0f, 500.0f, 0.1f), 25.0f));
 
