@@ -1375,22 +1375,22 @@ PictureWaveSynthAudioProcessor::ParameterLayout PictureWaveSynthAudioProcessor::
     }
 
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "mapRL", "R -> L", juce::NormalisableRange<float>(-1.0f, 1.0f, 0.001f), 1.0f));
+        "mapRL", "R -> L", juce::NormalisableRange<float>(-1.0f, 1.0f, 0.001f), 0.8f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "mapGL", "G -> L", juce::NormalisableRange<float>(-1.0f, 1.0f, 0.001f), 0.0f));
+        "mapGL", "G -> L", juce::NormalisableRange<float>(-1.0f, 1.0f, 0.001f), 0.5f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "mapBL", "B -> L", juce::NormalisableRange<float>(-1.0f, 1.0f, 0.001f), -1.0f));
+        "mapBL", "B -> L", juce::NormalisableRange<float>(-1.0f, 1.0f, 0.001f), -0.2f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         "mapAL", "A -> L", juce::NormalisableRange<float>(-1.0f, 1.0f, 0.001f), 0.0f));
 
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "mapRR", "R -> R", juce::NormalisableRange<float>(-1.0f, 1.0f, 0.001f), 0.0f));
+        "mapRR", "R -> R", juce::NormalisableRange<float>(-1.0f, 1.0f, 0.001f), -0.2f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "mapGR", "G -> R", juce::NormalisableRange<float>(-1.0f, 1.0f, 0.001f), 1.0f));
+        "mapGR", "G -> R", juce::NormalisableRange<float>(-1.0f, 1.0f, 0.001f), 0.5f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "mapBR", "B -> R", juce::NormalisableRange<float>(-1.0f, 1.0f, 0.001f), 0.0f));
+        "mapBR", "B -> R", juce::NormalisableRange<float>(-1.0f, 1.0f, 0.001f), 0.8f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "mapAR", "A -> R", juce::NormalisableRange<float>(-1.0f, 1.0f, 0.001f), 1.0f));
+        "mapAR", "A -> R", juce::NormalisableRange<float>(-1.0f, 1.0f, 0.001f), 0.0f));
 
     return { params.begin(), params.end() };
 }

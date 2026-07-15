@@ -1,4 +1,5 @@
 #include "PluginEditor.h"
+#include "Version.h"
 
 #include <cmath>
 
@@ -135,7 +136,7 @@ void PictureWaveSynthAudioProcessorEditor::ModulationSlider::paintOverChildren(j
     auto area = sliderLayout.sliderBounds.toFloat().reduced(3.0f);
     if (getSliderStyle() == juce::Slider::LinearVertical)
     {
-        const auto accent = findColour(juce::Slider::thumbColourId).withAlpha(0.95f);
+        const auto verticalAccent = findColour(juce::Slider::thumbColourId).withAlpha(0.95f);
         const auto markerY = area.getBottom() - area.getHeight() * effectiveNormalisedValue;
         g.setColour(juce::Colours::white.withAlpha(0.08f));
         g.fillRoundedRectangle(area.getRight() - 4.0f, area.getY(), 4.0f, area.getHeight(), 2.0f);
@@ -146,12 +147,12 @@ void PictureWaveSynthAudioProcessorEditor::ModulationSlider::paintOverChildren(j
             const auto fillTop = juce::jmin(centerY, markerY);
             const auto fillHeight = juce::jmax(2.0f, std::abs(markerY - centerY));
             g.fillRoundedRectangle(area.getX() + 1.0f, centerY - 1.5f, area.getWidth() - 2.0f, 3.0f, 1.5f);
-            g.setColour(accent);
+            g.setColour(verticalAccent);
             g.fillRoundedRectangle(area.getX() + 1.0f, fillTop - 1.5f, area.getWidth() - 2.0f, fillHeight + 3.0f, 2.0f);
         }
         else
         {
-            g.setColour(accent);
+            g.setColour(verticalAccent);
             g.fillRoundedRectangle(area.getX() + 1.0f, markerY - 1.5f, area.getWidth() - 2.0f, 3.0f, 1.5f);
         }
     }
@@ -894,7 +895,8 @@ void PictureWaveSynthAudioProcessorEditor::ImagePreviewComponent::paint(juce::Gr
 PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(PictureWaveSynthAudioProcessor& p)
     : AudioProcessorEditor(&p), audioProcessor(p)
 {
-    titleLabel.setText("PhotoSynthesis V1.0", juce::dontSendNotification);
+    titleLabel.setText(juce::String(PhotoSynthesisVersion::kDisplayName) + " v" + PhotoSynthesisVersion::kVersion,
+                       juce::dontSendNotification);
     titleLabel.setJustificationType(juce::Justification::centred);
     titleLabel.setFont(juce::FontOptions(22.0f, juce::Font::bold));
     addAndMakeVisible(titleLabel);
@@ -926,10 +928,22 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
     };
     loadPresetButton.onClick = [this] { loadPresetFromFile(); };
     savePresetButton.onClick = [this] { savePresetToFile(); };
+    aboutButton.onClick = []
+    {
+        const auto message = juce::String("Author: ") + PhotoSynthesisVersion::kAuthor + "\n"
+            + "Email: " + PhotoSynthesisVersion::kEmail + "\n"
+            + "Version: " + PhotoSynthesisVersion::kVersion;
+        juce::AlertWindow::showMessageBoxAsync(
+            juce::MessageBoxIconType::InfoIcon,
+            juce::String(PhotoSynthesisVersion::kDisplayName) + " - About",
+            message,
+            "OK");
+    };
     addAndMakeVisible(loadImageButton);
     addAndMakeVisible(initButton);
     addAndMakeVisible(loadPresetButton);
     addAndMakeVisible(savePresetButton);
+    addAndMakeVisible(aboutButton);
 
     imageStatusLabel.setText("No image loaded", juce::dontSendNotification);
     imageStatusLabel.setJustificationType(juce::Justification::centredLeft);
@@ -1453,7 +1467,8 @@ void PictureWaveSynthAudioProcessorEditor::configureComboReset(ResettableComboBo
     if (auto* param = audioProcessor.parameters.getParameter(paramId))
     {
         const auto defaultNorm = juce::jlimit(0.0f, 1.0f, param->getDefaultValue());
-        const auto defaultIndex = static_cast<int>(std::lround(defaultNorm * juce::jmax(0, combo.getNumItems() - 1))) + 1;
+        const auto maxIndex = juce::jmax(0, combo.getNumItems() - 1);
+        const auto defaultIndex = static_cast<int>(std::lround(defaultNorm * static_cast<float>(maxIndex))) + 1;
         combo.setResetSelectedId(defaultIndex);
     }
 }
@@ -1748,8 +1763,6 @@ void PictureWaveSynthAudioProcessorEditor::resized()
     const int layoutWidth = static_cast<int>(std::round(static_cast<float>(getWidth()) / safeScale));
     const int layoutHeight = static_cast<int>(std::round(static_cast<float>(getHeight()) / safeScale));
 
-    const int topBlockTop = 48;
-    const int topBlockHeight = 454;
     const int midBlockTop = 516;
     const int blockGap = 12;
     const int bottomMargin = 12;
@@ -1855,7 +1868,7 @@ void PictureWaveSynthAudioProcessorEditor::resized()
     mapLeftGroup.setBounds(20, mapGroupY, mapGroupW, mapGroupH);
     mapRightGroup.setBounds(360, mapGroupY, mapGroupW, mapGroupH);
 
-    auto placeMapGroupSlider = [mapTop, mapLabelTop, mapSliderW, mapSliderGap, mapSliderH](int x, juce::Slider& slider, juce::Label& label)
+    auto placeMapGroupSlider = [mapLabelTop, mapSliderH](int x, juce::Slider& slider, juce::Label& label)
     {
         slider.setBounds(x, mapTop, mapSliderW, mapSliderH);
         label.setBounds(x - 4, mapLabelTop, mapSliderW + 8, 18);
@@ -1891,7 +1904,7 @@ void PictureWaveSynthAudioProcessorEditor::resized()
     const int knobH = juce::jmax(70, midBlockHeight - 92);
     const int labelTop = knobTop + knobH + 4;
 
-    auto layoutPerfControl = [perfInnerX, knobTop, knobW, knobH, knobGap, labelTop, perfLabelH](int index, juce::Slider& slider, juce::Label& label)
+    auto layoutPerfControl = [knobW, knobH, knobGap, labelTop](int index, juce::Slider& slider, juce::Label& label)
     {
         const int x = perfInnerX + index * (knobW + knobGap);
         slider.setBounds(x, knobTop, knobW, knobH);
@@ -1995,6 +2008,7 @@ void PictureWaveSynthAudioProcessorEditor::resized()
     polyphonyCombo.setBounds(118, 56, 66, 24);
     uiZoomLabel.setBounds(198, 56, 74, 22);
     uiZoomCombo.setBounds(278, 56, 96, 24);
+    aboutButton.setBounds(layoutWidth - 100, 56, 76, 24);
 
     storeEditorGeometryToState();
 }

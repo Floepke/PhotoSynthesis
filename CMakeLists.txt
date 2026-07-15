@@ -23,7 +23,8 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(juce)
 
 juce_add_plugin(PhotoSynthesis
-  COMPANY_NAME "wavpic"
+  COMPANY_NAME "Philip Bergwerf"
+  BUNDLE_ID "com.philipbergwerf.photosynthesis"
   IS_SYNTH TRUE
   NEEDS_MIDI_INPUT TRUE
   NEEDS_MIDI_OUTPUT FALSE

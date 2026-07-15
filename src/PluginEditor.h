@@ -204,6 +204,7 @@ private:
     juce::TextButton initButton{ "Init" };
     juce::TextButton loadPresetButton{ "Load Preset" };
     juce::TextButton savePresetButton{ "Save Preset" };
+    juce::TextButton aboutButton{ "About" };
     juce::Label imageStatusLabel;
 
     ModulationSlider scanXSlider;
