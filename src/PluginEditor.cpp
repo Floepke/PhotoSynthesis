@@ -440,6 +440,17 @@ void PictureWaveSynthAudioProcessorEditor::ScannerWaveformViewer::setWaveform(co
     repaint();
 }
 
+void PictureWaveSynthAudioProcessorEditor::ScannerWaveformViewer::setAccent(juce::Colour newAccent)
+{
+    if (accent == newAccent)
+    {
+        return;
+    }
+
+    accent = newAccent;
+    repaint();
+}
+
 void PictureWaveSynthAudioProcessorEditor::ScannerWaveformViewer::paint(juce::Graphics& g)
 {
     auto area = getLocalBounds().toFloat();
@@ -2904,6 +2915,9 @@ void PictureWaveSynthAudioProcessorEditor::applyThemeToComponents()
         combo.setColour(juce::ComboBox::textColourId, kThemeTextStrong);
         combo.setColour(juce::ComboBox::arrowColourId, kThemeText);
     };
+
+    leftWaveformViewer.setAccent(kThemeAccentLine.withMultipliedBrightness(1.08f));
+    rightWaveformViewer.setAccent(kThemeAccentLine.withMultipliedSaturation(0.72f).withMultipliedBrightness(0.92f));
 
     applyLabelColour(scannerTitleLabel, kThemeHeadingText);
     applyLabelColour(mappingTitleLabel, kThemeHeadingText);

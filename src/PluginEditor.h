@@ -154,6 +154,7 @@ private:
         explicit ScannerWaveformViewer(juce::Colour newAccent);
 
         void setWaveform(const PictureWaveSynthAudioProcessor::WaveTable& newSamples);
+        void setAccent(juce::Colour newAccent);
         void paint(juce::Graphics& g) override;
 
     private:

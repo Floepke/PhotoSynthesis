@@ -47,6 +47,7 @@ public:
     void setWaveTables(const float* leftTable, const float* rightTable, int size, uint32_t generation);
     void setNoteDriftAmount(float amount);
     void setLiveNoteDriftRateHz(float rateHz);
+    void setRandomSeed(uint32_t seed);
     double getPropellorPhaseOffset() const;
     uint32_t getRandomModulationSeed() const;
     float getNoteOnVelocity() const;
@@ -90,6 +91,7 @@ private:
     bool randomPropellorPhaseEnabled = false;
     bool arReleaseTriggered = false;
     bool retriggeringFromSteal = false;
+    juce::Random randomGenerator;
 };
 
 class RoundRobinSynthesiser final : public juce::Synthesiser
@@ -277,6 +279,7 @@ private:
     std::vector<bool> perVoiceHasCachedScannerState;
     std::array<double, 8> lfoPhases{};
     std::array<int64_t, 8> lfoCyclePositions{};
+    juce::Random instanceRandom;
     std::array<std::atomic<float>, kNumModTargets> modulationDisplayValues{};
     std::array<std::atomic<float>, kNumModTargets> effectiveDisplayValues{};
     std::array<float, kNumModTargets> smoothedModulationSums{};

@@ -141,6 +141,21 @@ float renderExtendedLfoSample(int waveform, int lfoIndex, int64_t cyclePosition,
     }
 }
 
+uint32_t makeUniqueSeed(const void* instanceAddress, uint32_t salt = 0)
+{
+    static std::atomic<uint32_t> seedCounter{ 1u };
+    const auto counter = seedCounter.fetch_add(1u, std::memory_order_relaxed);
+    const auto ticks = static_cast<uint64_t>(juce::Time::getHighResolutionTicks());
+    const auto ptr = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(instanceAddress));
+    const auto mixed = static_cast<uint32_t>(ticks)
+        ^ static_cast<uint32_t>(ticks >> 32)
+        ^ static_cast<uint32_t>(ptr)
+        ^ static_cast<uint32_t>(ptr >> 32)
+        ^ counter
+        ^ salt;
+    return mixNoiseSeed(mixed == 0u ? 0x9e3779b9u : mixed);
+}
+
 double phaseOffsetFromVoiceSeed(int lfoIndex, uint32_t voiceSeed)
 {
     const auto mixedSeed = mixNoiseSeed(voiceSeed ^ (0x9e3779b9U * static_cast<uint32_t>(lfoIndex + 1)));
@@ -196,9 +211,9 @@ void SineWaveVoice::startNote(int midiNoteNumber, float velocity, juce::Synthesi
     phaseDelta = baseFrequency / currentSampleRate;
 
     const auto maxSemitoneOffset = juce::jlimit(0.0f, 1.0f, noteDriftAmount);
-    const auto nextDriftValue = [maxSemitoneOffset]()
+    const auto nextDriftValue = [this, maxSemitoneOffset]()
     {
-        return juce::Random::getSystemRandom().nextFloat() * 2.0f * maxSemitoneOffset - maxSemitoneOffset;
+        return randomGenerator.nextFloat() * 2.0f * maxSemitoneOffset - maxSemitoneOffset;
     };
 
     if (maxSemitoneOffset <= 0.0f)
@@ -232,8 +247,8 @@ void SineWaveVoice::startNote(int midiNoteNumber, float velocity, juce::Synthesi
     }
 
     retriggeringFromSteal = false;
-    randomModulationSeed = static_cast<uint32_t>(juce::Random::getSystemRandom().nextInt());
-    propellorPhaseOffset = randomPropellorPhaseEnabled ? juce::Random::getSystemRandom().nextFloat() : 0.0f;
+    randomModulationSeed = static_cast<uint32_t>(randomGenerator.nextInt());
+    propellorPhaseOffset = randomPropellorPhaseEnabled ? randomGenerator.nextFloat() : 0.0f;
     arReleaseTriggered = false;
     arReleaseSampleCountdown = juce::jmax(1, arReleaseSampleCountdown);
     adsr.noteOn();
@@ -280,7 +295,7 @@ void SineWaveVoice::renderNextBlock(juce::AudioBuffer<float>& outputBuffer, int 
                 if (driftSegmentProgress >= driftSegmentLengthSamples)
                 {
                     const auto maxSemitoneOffset = juce::jlimit(0.0f, 1.0f, noteDriftAmount);
-                    const auto nextTarget = juce::Random::getSystemRandom().nextFloat() * 2.0f * maxSemitoneOffset - maxSemitoneOffset;
+                    const auto nextTarget = randomGenerator.nextFloat() * 2.0f * maxSemitoneOffset - maxSemitoneOffset;
                     driftStartSemitone = driftCurrentSemitone;
                     driftTargetSemitone = nextTarget;
                     driftSegmentProgress = 0;
@@ -526,6 +541,12 @@ void SineWaveVoice::setLiveNoteDriftRateHz(float rateHz)
     liveNoteDriftRateHz = juce::jmax(0.0f, rateHz);
 }
 
+void SineWaveVoice::setRandomSeed(uint32_t seed)
+{
+    randomGenerator.setSeedRandomly();
+    randomGenerator.setSeed(static_cast<int64>(seed == 0u ? 1u : seed));
+}
+
 double SineWaveVoice::getPropellorPhaseOffset() const
 {
     return static_cast<double>(propellorPhaseOffset) * juce::MathConstants<double>::twoPi;
@@ -551,11 +572,14 @@ PictureWaveSynthAudioProcessor::PictureWaveSynthAudioProcessor()
     : AudioProcessor(BusesProperties().withOutput("Output", juce::AudioChannelSet::stereo(), true)),
       parameters(*this, nullptr, "PARAMETERS", createParameterLayout())
 {
+    instanceRandom.setSeed(static_cast<int64>(makeUniqueSeed(this, 0x31415926u)));
+
     synth.clearVoices();
     voices.reserve(static_cast<size_t>(kMaxVoices));
     for (int i = 0; i < kMaxVoices; ++i)
     {
         auto* voice = new SineWaveVoice();
+        voice->setRandomSeed(makeUniqueSeed(this, static_cast<uint32_t>(i + 1)));
         voices.push_back(voice);
         synth.addVoice(voice);
     }
@@ -611,7 +635,7 @@ void PictureWaveSynthAudioProcessor::prepareToPlay(double sampleRate, int sample
     modulationAftertouch = 0.0f;
     modulationModWheel = 0.0f;
     heldNoteCount = 0;
-    modulationPreviewSeed = static_cast<uint32_t>(juce::Random::getSystemRandom().nextInt());
+    modulationPreviewSeed = static_cast<uint32_t>(instanceRandom.nextInt());
     waveTableGeneration = 0;
     smoothedModulationSums.fill(0.0f);
     smoothedPreviewModulationSums.fill(0.0f);
@@ -1133,8 +1157,10 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
                 continue;
             }
 
+            const auto voiceIsActive = voice->isVoiceActive();
+
             std::array<float, kModTargetParamIds.size()> voiceModulationSums = smoothedModulationSums;
-            if (hasPerVoiceVariableRoutes)
+            if (hasPerVoiceVariableRoutes && voiceIsActive)
             {
                 voiceModulationSums.fill(0.0f);
                 for (const auto& route : routes)
@@ -1209,16 +1235,17 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
                 return param->convertFrom0to1(modNorm);
             };
 
-            const auto voiceAttack = hasPerVoiceVariableRoutes ? readVoiceParam("attack") : attack;
-            const auto voiceDecay = hasPerVoiceVariableRoutes ? readVoiceParam("decay") : decay;
-            const auto voiceSustain = hasPerVoiceVariableRoutes ? readVoiceParam("sustain") : sustain;
-            const auto voiceNoteDrift = hasPerVoiceVariableRoutes ? readVoiceParam("noteDrift") : noteDriftAmount;
-            const auto voiceLiveNoteDrift = hasPerVoiceVariableRoutes ? readVoiceParam("liveNoteDrift") : liveNoteDriftHz;
+            const auto useVoiceModulation = hasPerVoiceVariableRoutes && voiceIsActive;
+            const auto voiceAttack = useVoiceModulation ? readVoiceParam("attack") : attack;
+            const auto voiceDecay = useVoiceModulation ? readVoiceParam("decay") : decay;
+            const auto voiceSustain = useVoiceModulation ? readVoiceParam("sustain") : sustain;
+            const auto voiceNoteDrift = useVoiceModulation ? readVoiceParam("noteDrift") : noteDriftAmount;
+            const auto voiceLiveNoteDrift = useVoiceModulation ? readVoiceParam("liveNoteDrift") : liveNoteDriftHz;
 
             voice->updateAdsr(voiceAttack,
                               voiceDecay,
                               voiceSustain,
-                              hasPerVoiceVariableRoutes ? readVoiceParam("release") : release,
+                              useVoiceModulation ? readVoiceParam("release") : release,
                               envelopeMode);
             voice->setNoteDriftAmount(voiceNoteDrift);
             voice->setLiveNoteDriftRateHz(voiceLiveNoteDrift);
@@ -1228,6 +1255,17 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
             {
                 auto& left = perVoiceWaveTableLeft[static_cast<size_t>(i)];
                 auto& right = perVoiceWaveTableRight[static_cast<size_t>(i)];
+
+                if (!voiceIsActive)
+                {
+                    // Inactive voices keep their last cached table; avoid per-voice scanner rebuilds.
+                    voice->setWaveTables(left.data(),
+                                         right.data(),
+                                         kWaveTableSize,
+                                         perVoiceWaveTableGenerations[static_cast<size_t>(i)]);
+                    continue;
+                }
+
                 auto voiceScanner = scanner;
                 if (hasPerVoiceVariableScannerRoutes)
                 {
