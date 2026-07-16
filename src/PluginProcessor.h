@@ -199,10 +199,10 @@ private:
     struct ScannerParams
     {
         int mode = 0;
-        float x = 0.5f;
-        float y = 0.5f;
-        float length = 0.7f;
-        float angleDegrees = 0.0f;
+        float lineX1 = 0.2f;
+        float lineY1 = 0.5f;
+        float lineX2 = 0.8f;
+        float lineY2 = 0.5f;
         float ovalX1 = 0.3f;
         float ovalY1 = 0.3f;
         float ovalX2 = 0.7f;

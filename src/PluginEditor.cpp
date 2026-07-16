@@ -19,6 +19,154 @@ const std::array<juce::Colour, kNumLfos> kLfoTabColours{
     juce::Colour::fromRGB(154, 98, 170)
 };
 
+struct ThemePalette
+{
+    juce::Colour background;
+    juce::Colour topPanel;
+    juce::Colour midPanelLeft;
+    juce::Colour midPanelRight;
+    juce::Colour bottomPanel;
+    juce::Colour tab;
+    juce::Colour outline;
+    juce::Colour text;
+    juce::Colour textStrong;
+    juce::Colour textMuted;
+    juce::Colour headingText;
+    juce::Colour imageFrame;
+    juce::Colour imagePlaceholder;
+    juce::Colour scannerOverlay;
+    juce::Colour accentLine;
+    juce::Colour modPositive;
+    juce::Colour modNegative;
+    juce::Colour modNeutral;
+};
+
+const std::array<ThemePalette, 4> kThemePalettes{{
+    {
+        juce::Colour::fromRGB(15, 26, 21),
+        juce::Colour::fromRGB(23, 42, 34),
+        juce::Colour::fromRGB(21, 39, 32),
+        juce::Colour::fromRGB(19, 36, 30),
+        juce::Colour::fromRGB(18, 34, 28),
+        juce::Colour::fromRGB(40, 74, 59),
+        juce::Colour::fromRGB(69, 116, 94),
+        juce::Colour::fromRGB(201, 235, 218),
+        juce::Colour::fromRGB(226, 247, 236),
+        juce::Colour::fromRGB(170, 205, 188),
+        juce::Colour::fromRGB(235, 250, 242),
+        juce::Colour::fromRGB(12, 22, 18),
+        juce::Colour::fromRGB(34, 58, 47),
+        juce::Colour::fromRGBA(88, 222, 150, 230),
+        juce::Colour::fromRGB(118, 226, 157),
+        juce::Colour::fromRGB(102, 230, 164),
+        juce::Colour::fromRGB(82, 178, 130),
+        juce::Colour::fromRGB(126, 208, 164)
+    },
+    {
+        juce::Colour::fromRGB(32, 17, 18),
+        juce::Colour::fromRGB(54, 26, 28),
+        juce::Colour::fromRGB(48, 24, 26),
+        juce::Colour::fromRGB(43, 22, 24),
+        juce::Colour::fromRGB(39, 20, 22),
+        juce::Colour::fromRGB(90, 43, 48),
+        juce::Colour::fromRGB(144, 84, 90),
+        juce::Colour::fromRGB(244, 217, 214),
+        juce::Colour::fromRGB(255, 235, 233),
+        juce::Colour::fromRGB(213, 177, 173),
+        juce::Colour::fromRGB(255, 241, 240),
+        juce::Colour::fromRGB(25, 13, 14),
+        juce::Colour::fromRGB(63, 33, 35),
+        juce::Colour::fromRGBA(245, 110, 110, 230),
+        juce::Colour::fromRGB(243, 146, 146),
+        juce::Colour::fromRGB(251, 132, 132),
+        juce::Colour::fromRGB(184, 93, 93),
+        juce::Colour::fromRGB(233, 157, 157)
+    },
+    {
+        juce::Colour::fromRGB(15, 22, 34),
+        juce::Colour::fromRGB(20, 37, 57),
+        juce::Colour::fromRGB(19, 34, 52),
+        juce::Colour::fromRGB(18, 31, 48),
+        juce::Colour::fromRGB(17, 29, 44),
+        juce::Colour::fromRGB(40, 68, 102),
+        juce::Colour::fromRGB(73, 116, 170),
+        juce::Colour::fromRGB(204, 223, 245),
+        juce::Colour::fromRGB(227, 238, 252),
+        juce::Colour::fromRGB(173, 195, 224),
+        juce::Colour::fromRGB(236, 245, 255),
+        juce::Colour::fromRGB(12, 18, 28),
+        juce::Colour::fromRGB(33, 50, 73),
+        juce::Colour::fromRGBA(114, 182, 255, 230),
+        juce::Colour::fromRGB(132, 194, 255),
+        juce::Colour::fromRGB(119, 201, 255),
+        juce::Colour::fromRGB(87, 142, 214),
+        juce::Colour::fromRGB(136, 187, 238)
+    },
+    {
+        juce::Colour::fromRGB(28, 26, 24),
+        juce::Colour::fromRGB(43, 39, 35),
+        juce::Colour::fromRGB(39, 35, 31),
+        juce::Colour::fromRGB(35, 32, 29),
+        juce::Colour::fromRGB(33, 30, 27),
+        juce::Colour::fromRGB(74, 67, 60),
+        juce::Colour::fromRGB(119, 110, 100),
+        juce::Colour::fromRGB(227, 221, 211),
+        juce::Colour::fromRGB(240, 234, 225),
+        juce::Colour::fromRGB(191, 182, 170),
+        juce::Colour::fromRGB(246, 241, 233),
+        juce::Colour::fromRGB(21, 19, 17),
+        juce::Colour::fromRGB(55, 49, 43),
+        juce::Colour::fromRGBA(204, 176, 135, 230),
+        juce::Colour::fromRGB(214, 194, 156),
+        juce::Colour::fromRGB(220, 196, 145),
+        juce::Colour::fromRGB(169, 148, 107),
+        juce::Colour::fromRGB(198, 180, 144)
+    }
+}};
+
+juce::Colour kThemeBackground;
+juce::Colour kThemeTopPanel;
+juce::Colour kThemeMidPanelLeft;
+juce::Colour kThemeMidPanelRight;
+juce::Colour kThemeBottomPanel;
+juce::Colour kThemeTab;
+juce::Colour kThemeOutline;
+juce::Colour kThemeText;
+juce::Colour kThemeTextStrong;
+juce::Colour kThemeTextMuted;
+juce::Colour kThemeHeadingText;
+juce::Colour kThemeImageFrame;
+juce::Colour kThemeImagePlaceholder;
+juce::Colour kThemeScannerOverlay;
+juce::Colour kThemeAccentLine;
+juce::Colour kThemeModPositive;
+juce::Colour kThemeModNegative;
+juce::Colour kThemeModNeutral;
+
+void applyThemePaletteByIndex(int oneBasedIndex)
+{
+    const auto index = static_cast<size_t>(juce::jlimit(1, static_cast<int>(kThemePalettes.size()), oneBasedIndex) - 1);
+    const auto& palette = kThemePalettes[index];
+    kThemeBackground = palette.background;
+    kThemeTopPanel = palette.topPanel;
+    kThemeMidPanelLeft = palette.midPanelLeft;
+    kThemeMidPanelRight = palette.midPanelRight;
+    kThemeBottomPanel = palette.bottomPanel;
+    kThemeTab = palette.tab;
+    kThemeOutline = palette.outline;
+    kThemeText = palette.text;
+    kThemeTextStrong = palette.textStrong;
+    kThemeTextMuted = palette.textMuted;
+    kThemeHeadingText = palette.headingText;
+    kThemeImageFrame = palette.imageFrame;
+    kThemeImagePlaceholder = palette.imagePlaceholder;
+    kThemeScannerOverlay = palette.scannerOverlay;
+    kThemeAccentLine = palette.accentLine;
+    kThemeModPositive = palette.modPositive;
+    kThemeModNegative = palette.modNegative;
+    kThemeModNeutral = palette.modNeutral;
+}
+
 juce::Colour getLfoTabColourForIndex(int tabIndex)
 {
     const auto index = static_cast<size_t>(juce::jlimit(0, kNumLfos - 1, tabIndex));
@@ -36,7 +184,7 @@ juce::Colour getLfoContentBackgroundForIndex(int tabIndex)
 constexpr std::array<const char*, 38> kModTargetNames{
     "None",
     "Attack", "Decay", "Sustain", "Release", "Gain", "Note Drift", "Drift Freq",
-    "Line X", "Line Y", "Line Length", "Line Angle",
+    "Line X1", "Line Y1", "Line X2", "Line Y2",
     "Oval X1", "Oval Y1", "Oval X2", "Oval Y2",
     "Rect X", "Rect Y", "Rect Width", "Rect Height",
     "Tri X1", "Tri Y1", "Tri X2", "Tri Y2", "Tri X3", "Tri Y3",
@@ -46,10 +194,7 @@ constexpr std::array<const char*, 38> kModTargetNames{
 
 float clampParameterValue(const juce::String& paramId, float value)
 {
-    if (paramId == "scanAngle")
-        return juce::jlimit(-180.0f, 180.0f, value);
-
-    if (paramId == "scanLength" || paramId == "rectWidth" || paramId == "rectHeight" || paramId == "propSize")
+    if (paramId == "rectWidth" || paramId == "rectHeight" || paramId == "propSize")
         return juce::jlimit(0.05f, 1.5f, value);
 
     if (paramId == "propSpeed")
@@ -99,9 +244,9 @@ void PictureWaveSynthAudioProcessorEditor::ModulationSlider::paintOverChildren(j
 {
     const auto amount = juce::jlimit(-1.0f, 1.0f, modulationAmount);
     const auto magnitude = std::abs(amount);
-    const auto positiveColour = juce::Colour::fromRGB(89, 208, 149);
-    const auto negativeColour = juce::Colour::fromRGB(255, 145, 92);
-    const auto neutralColour = juce::Colour::fromRGB(122, 190, 255);
+    const auto positiveColour = kThemeModPositive;
+    const auto negativeColour = kThemeModNegative;
+    const auto neutralColour = kThemeModNeutral;
     const auto accentBase = magnitude < 0.04f ? neutralColour : (amount >= 0.0f ? positiveColour : negativeColour);
     const auto accent = accentBase.withAlpha(0.55f + 0.35f * magnitude);
     const auto sliderLayout = getLookAndFeel().getSliderLayout(*this);
@@ -385,7 +530,7 @@ void PictureWaveSynthAudioProcessorEditor::FilterResponseViewer::paint(juce::Gra
 
     g.setColour(juce::Colours::white.withAlpha(0.12f));
     g.drawRoundedRectangle(getLocalBounds().toFloat().reduced(0.5f), 8.0f, 1.0f);
-    g.setColour(juce::Colour::fromRGB(238, 197, 116));
+    g.setColour(kThemeAccentLine);
     g.strokePath(response, juce::PathStrokeType(2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 }
 
@@ -499,10 +644,10 @@ void PictureWaveSynthAudioProcessorEditor::ImagePreviewComponent::setParameterCh
 
 void PictureWaveSynthAudioProcessorEditor::ImagePreviewComponent::setScanner(
     int mode,
-    float newLineX,
-    float newLineY,
-    float newLineLength,
-    float newLineAngleDegrees,
+    float newLineX1,
+    float newLineY1,
+    float newLineX2,
+    float newLineY2,
     float newOvalX1,
     float newOvalY1,
     float newOvalX2,
@@ -523,10 +668,10 @@ void PictureWaveSynthAudioProcessorEditor::ImagePreviewComponent::setScanner(
     double newPropPhase)
 {
     scannerMode = mode;
-    lineX = newLineX;
-    lineY = newLineY;
-    lineLength = newLineLength;
-    lineAngle = newLineAngleDegrees;
+    lineX1 = newLineX1;
+    lineY1 = newLineY1;
+    lineX2 = newLineX2;
+    lineY2 = newLineY2;
     ovalX1 = newOvalX1;
     ovalY1 = newOvalY1;
     ovalX2 = newOvalX2;
@@ -649,12 +794,9 @@ PictureWaveSynthAudioProcessorEditor::ImagePreviewComponent::hitTestHandle(juce:
         return DragHandle::none;
     }
 
-    const auto center = normalisedToPoint(lineX, lineY);
-    const auto angleRadians = juce::degreesToRadians(lineAngle);
-    const auto dx = std::cos(angleRadians) * lineLength * 0.5f;
-    const auto dy = std::sin(angleRadians) * lineLength * 0.5f;
-    const auto a = normalisedToPoint(lineX - static_cast<float>(dx), lineY - static_cast<float>(dy));
-    const auto b = normalisedToPoint(lineX + static_cast<float>(dx), lineY + static_cast<float>(dy));
+    const auto center = normalisedToPoint(0.5f * (lineX1 + lineX2), 0.5f * (lineY1 + lineY2));
+    const auto a = normalisedToPoint(lineX1, lineY1);
+    const auto b = normalisedToPoint(lineX2, lineY2);
     if (near(center)) return DragHandle::lineCenter;
     if (near(a)) return DragHandle::lineA;
     if (near(b)) return DragHandle::lineB;
@@ -664,19 +806,27 @@ PictureWaveSynthAudioProcessorEditor::ImagePreviewComponent::hitTestHandle(juce:
 void PictureWaveSynthAudioProcessorEditor::ImagePreviewComponent::dragLineHandle(DragHandle handle, juce::Point<float> p)
 {
     auto uv = pointToNormalised(p);
-
-    const auto angleRadians = juce::degreesToRadians(lineAngle);
-    const auto dx = std::cos(angleRadians) * lineLength * 0.5f;
-    const auto dy = std::sin(angleRadians) * lineLength * 0.5f;
-    auto a = std::array<float, 2>{ lineX - static_cast<float>(dx), lineY - static_cast<float>(dy) };
-    auto b = std::array<float, 2>{ lineX + static_cast<float>(dx), lineY + static_cast<float>(dy) };
+    auto a = std::array<float, 2>{ lineX1, lineY1 };
+    auto b = std::array<float, 2>{ lineX2, lineY2 };
 
     if (handle == DragHandle::lineCenter)
     {
-        lineX = uv[0];
-        lineY = uv[1];
-        emitParameter("scanX", lineX);
-        emitParameter("scanY", lineY);
+        const auto center = std::array<float, 2>{ 0.5f * (lineX1 + lineX2), 0.5f * (lineY1 + lineY2) };
+        const auto delta = std::array<float, 2>{ uv[0] - center[0], uv[1] - center[1] };
+
+        a[0] = juce::jlimit(0.0f, 1.0f, lineX1 + delta[0]);
+        a[1] = juce::jlimit(0.0f, 1.0f, lineY1 + delta[1]);
+        b[0] = juce::jlimit(0.0f, 1.0f, lineX2 + delta[0]);
+        b[1] = juce::jlimit(0.0f, 1.0f, lineY2 + delta[1]);
+
+        lineX1 = a[0];
+        lineY1 = a[1];
+        lineX2 = b[0];
+        lineY2 = b[1];
+        emitParameter("lineX1", lineX1);
+        emitParameter("lineY1", lineY1);
+        emitParameter("lineX2", lineX2);
+        emitParameter("lineY2", lineY2);
         repaint();
         return;
     }
@@ -690,17 +840,15 @@ void PictureWaveSynthAudioProcessorEditor::ImagePreviewComponent::dragLineHandle
         b = uv;
     }
 
-    lineX = 0.5f * (a[0] + b[0]);
-    lineY = 0.5f * (a[1] + b[1]);
-    const auto ddx = b[0] - a[0];
-    const auto ddy = b[1] - a[1];
-    lineLength = juce::jlimit(0.05f, 1.5f, std::sqrt(ddx * ddx + ddy * ddy));
-    lineAngle = juce::radiansToDegrees(std::atan2(ddy, ddx));
+    lineX1 = a[0];
+    lineY1 = a[1];
+    lineX2 = b[0];
+    lineY2 = b[1];
 
-    emitParameter("scanX", lineX);
-    emitParameter("scanY", lineY);
-    emitParameter("scanLength", lineLength);
-    emitParameter("scanAngle", lineAngle);
+    emitParameter("lineX1", lineX1);
+    emitParameter("lineY1", lineY1);
+    emitParameter("lineX2", lineX2);
+    emitParameter("lineY2", lineY2);
     repaint();
 }
 
@@ -889,7 +1037,7 @@ void PictureWaveSynthAudioProcessorEditor::ImagePreviewComponent::mouseUp(const 
 void PictureWaveSynthAudioProcessorEditor::ImagePreviewComponent::paint(juce::Graphics& g)
 {
     auto bounds = getLocalBounds().toFloat();
-    g.setColour(juce::Colour::fromRGB(13, 16, 20));
+    g.setColour(kThemeImageFrame);
     g.fillRoundedRectangle(bounds, 6.0f);
 
     auto content = bounds.reduced(8.0f);
@@ -915,9 +1063,9 @@ void PictureWaveSynthAudioProcessorEditor::ImagePreviewComponent::paint(juce::Gr
     }
     else
     {
-        g.setColour(juce::Colour::fromRGB(42, 47, 56));
+        g.setColour(kThemeImagePlaceholder);
         g.fillRoundedRectangle(content, 4.0f);
-        g.setColour(juce::Colour::fromRGB(180, 188, 200));
+        g.setColour(kThemeTextMuted);
         g.setFont(14.0f);
         g.drawFittedText("Load a photo to drive the scanner oscillator", content.toNearestInt(), juce::Justification::centred, 1);
     }
@@ -927,7 +1075,7 @@ void PictureWaveSynthAudioProcessorEditor::ImagePreviewComponent::paint(juce::Gr
         return;
     }
 
-    g.setColour(juce::Colour::fromRGBA(245, 95, 45, 230));
+    g.setColour(kThemeScannerOverlay);
 
     const auto toPoint = [&drawArea](float u, float v)
     {
@@ -1007,18 +1155,33 @@ void PictureWaveSynthAudioProcessorEditor::ImagePreviewComponent::paint(juce::Gr
         g.fillEllipse(scannerLine.getEndX() - 3.0f, scannerLine.getEndY() - 3.0f, 6.0f, 6.0f);
     };
 
+    const auto drawEndpointLineOverlay = [&](float x1Norm, float y1Norm, float x2Norm, float y2Norm)
+    {
+        const auto p1 = toPoint(x1Norm, y1Norm);
+        const auto p2 = toPoint(x2Norm, y2Norm);
+        const auto cx = 0.5f * (p1.x + p2.x);
+        const auto cy = 0.5f * (p1.y + p2.y);
+
+        g.drawLine(juce::Line<float>(p1, p2), 2.2f);
+        g.fillEllipse(cx - 4.0f, cy - 4.0f, 8.0f, 8.0f);
+        g.fillEllipse(p1.x - 3.0f, p1.y - 3.0f, 6.0f, 6.0f);
+        g.fillEllipse(p2.x - 3.0f, p2.y - 3.0f, 6.0f, 6.0f);
+    };
+
     if (scannerMode == 4)
     {
         drawLineOverlay(propX, propY, propSize, static_cast<float>(juce::radiansToDegrees(propPhase)));
         return;
     }
 
-    drawLineOverlay(lineX, lineY, lineLength, lineAngle);
+    drawEndpointLineOverlay(lineX1, lineY1, lineX2, lineY2);
 }
 
 PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(PictureWaveSynthAudioProcessor& p)
     : AudioProcessorEditor(&p), audioProcessor(p)
 {
+    applyThemePaletteByIndex(1);
+
     titleLabel.setText(juce::String(PhotoSynthesisVersion::kDisplayName) + " v" + PhotoSynthesisVersion::kVersion,
                        juce::dontSendNotification);
     titleLabel.setJustificationType(juce::Justification::centred);
@@ -1027,24 +1190,24 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
 
     setupSectionLabel(scannerTitleLabel, "Image Scanner");
     setupSectionLabel(mappingTitleLabel, "RGBA Mapping to Stereo (+/-)");
-    scanSplineInterpolationButton.setColour(juce::ToggleButton::textColourId, juce::Colour::fromRGB(214, 219, 230));
+    scanSplineInterpolationButton.setColour(juce::ToggleButton::textColourId, kThemeText);
     addAndMakeVisible(scanSplineInterpolationButton);
     setupSectionLabel(envTitleLabel, "Performance");
 
     addAndMakeVisible(scannerTabs);
-    scannerTabs.addTab("Photo Scanner", juce::Colour::fromRGB(44, 50, 62), &photoScannerTabPage, false);
-    scannerTabs.addTab("Filter", juce::Colour::fromRGB(44, 50, 62), &fxTabPage, false);
-    scannerTabs.addTab("Reverb", juce::Colour::fromRGB(44, 50, 62), &reverbTabPage, false);
+    scannerTabs.addTab("Photo Scanner", kThemeTab, &photoScannerTabPage, false);
+    scannerTabs.addTab("Filter", kThemeTab, &fxTabPage, false);
+    scannerTabs.addTab("Reverb", kThemeTab, &reverbTabPage, false);
     scannerTabs.setCurrentTabIndex(0);
 
     fxFilterGroup.setText("Stereo Filter");
-    fxFilterGroup.setColour(juce::GroupComponent::outlineColourId, juce::Colour::fromRGB(65, 73, 88));
-    fxFilterGroup.setColour(juce::GroupComponent::textColourId, juce::Colour::fromRGB(231, 235, 242));
+    fxFilterGroup.setColour(juce::GroupComponent::outlineColourId, kThemeOutline);
+    fxFilterGroup.setColour(juce::GroupComponent::textColourId, kThemeTextStrong);
     fxTabPage.addAndMakeVisible(fxFilterGroup);
 
     fxFilterTypeLabel.setText("Type", juce::dontSendNotification);
     fxFilterTypeLabel.setJustificationType(juce::Justification::centredLeft);
-    fxFilterTypeLabel.setColour(juce::Label::textColourId, juce::Colour::fromRGB(214, 219, 230));
+    fxFilterTypeLabel.setColour(juce::Label::textColourId, kThemeText);
     fxTabPage.addAndMakeVisible(fxFilterTypeLabel);
 
     const auto filterTypeNames = PictureWaveSynthAudioProcessor::getFxFilterTypeNames();
@@ -1068,7 +1231,7 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
 
         label.setText(text, juce::dontSendNotification);
         label.setJustificationType(juce::Justification::centred);
-        label.setColour(juce::Label::textColourId, juce::Colour::fromRGB(214, 219, 230));
+        label.setColour(juce::Label::textColourId, kThemeText);
         fxTabPage.addAndMakeVisible(label);
     };
 
@@ -1078,8 +1241,8 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
     fxTabPage.addAndMakeVisible(fxFilterViewer);
 
     reverbGroup.setText("Stereo Reverb");
-    reverbGroup.setColour(juce::GroupComponent::outlineColourId, juce::Colour::fromRGB(65, 73, 88));
-    reverbGroup.setColour(juce::GroupComponent::textColourId, juce::Colour::fromRGB(231, 235, 242));
+    reverbGroup.setColour(juce::GroupComponent::outlineColourId, kThemeOutline);
+    reverbGroup.setColour(juce::GroupComponent::textColourId, kThemeTextStrong);
     reverbTabPage.addAndMakeVisible(reverbGroup);
 
     const auto setupReverbKnob = [this](ModulationSlider& slider, juce::Label& label, const juce::String& text)
@@ -1091,7 +1254,7 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
 
         label.setText(text, juce::dontSendNotification);
         label.setJustificationType(juce::Justification::centred);
-        label.setColour(juce::Label::textColourId, juce::Colour::fromRGB(214, 219, 230));
+        label.setColour(juce::Label::textColourId, kThemeText);
         reverbTabPage.addAndMakeVisible(label);
     };
 
@@ -1100,7 +1263,7 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
     setupReverbKnob(reverbWidthSlider, reverbWidthLabel, "Width");
     setupReverbKnob(reverbWetSlider, reverbWetLabel, "Wet");
     setupReverbKnob(reverbDrySlider, reverbDryLabel, "Dry");
-    reverbFreezeButton.setColour(juce::ToggleButton::textColourId, juce::Colour::fromRGB(214, 219, 230));
+    reverbFreezeButton.setColour(juce::ToggleButton::textColourId, kThemeText);
     reverbTabPage.addAndMakeVisible(reverbFreezeButton);
 
     loadImageButton.onClick = [this] { openImageChooser(); };
@@ -1137,7 +1300,7 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
 
     imageStatusLabel.setText("No image loaded", juce::dontSendNotification);
     imageStatusLabel.setJustificationType(juce::Justification::centredLeft);
-    imageStatusLabel.setColour(juce::Label::textColourId, juce::Colour::fromRGB(203, 210, 222));
+    imageStatusLabel.setColour(juce::Label::textColourId, kThemeTextMuted);
     addAndMakeVisible(imageStatusLabel);
     addAndMakeVisible(imagePreview);
     imagePreview.setParameterChangeCallback([this](const juce::String& paramId, float value)
@@ -1145,14 +1308,14 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
         updateParameterFromPreview(paramId, value);
     });
 
-    setupScannerSlider(scanXSlider, scanXLabel, "Line X");
-    setupScannerSlider(scanYSlider, scanYLabel, "Line Y");
-    setupScannerSlider(scanLengthSlider, scanLengthLabel, "Line Length");
-    setupScannerSlider(scanAngleSlider, scanAngleLabel, "Line Angle");
+    setupScannerSlider(scanXSlider, scanXLabel, "Line X1");
+    setupScannerSlider(scanYSlider, scanYLabel, "Line Y1");
+    setupScannerSlider(scanLengthSlider, scanLengthLabel, "Line X2");
+    setupScannerSlider(scanAngleSlider, scanAngleLabel, "Line Y2");
 
     scannerModeLabel.setText("Scanner Mode", juce::dontSendNotification);
     scannerModeLabel.setJustificationType(juce::Justification::centredLeft);
-    scannerModeLabel.setColour(juce::Label::textColourId, juce::Colour::fromRGB(214, 219, 230));
+    scannerModeLabel.setColour(juce::Label::textColourId, kThemeText);
     addAndMakeVisible(scannerModeLabel);
 
     scannerModeCombo.addItem("Line", 1);
@@ -1167,9 +1330,9 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
     };
     addAndMakeVisible(scannerModeCombo);
 
-    randomPhaseButton.setColour(juce::ToggleButton::textColourId, juce::Colour::fromRGB(214, 219, 230));
+    randomPhaseButton.setColour(juce::ToggleButton::textColourId, kThemeText);
     addAndMakeVisible(randomPhaseButton);
-    propTempoSyncButton.setColour(juce::ToggleButton::textColourId, juce::Colour::fromRGB(214, 219, 230));
+    propTempoSyncButton.setColour(juce::ToggleButton::textColourId, kThemeText);
     propTempoSyncButton.onClick = [this]
     {
         rebuildModeAttachments();
@@ -1217,7 +1380,7 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
 
     envTypeLabel.setText("Env.", juce::dontSendNotification);
     envTypeLabel.setJustificationType(juce::Justification::centredRight);
-    envTypeLabel.setColour(juce::Label::textColourId, juce::Colour::fromRGB(214, 219, 230));
+    envTypeLabel.setColour(juce::Label::textColourId, kThemeText);
     addAndMakeVisible(envTypeLabel);
     envTypeCombo.addItem("ADSR", 1);
     envTypeCombo.addItem("ASR", 2);
@@ -1239,31 +1402,31 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
     setupMappingSlider(mapARSlider, mapARLabel, "A -> R");
 
     mapLeftGroup.setText("Left Speaker");
-    mapLeftGroup.setColour(juce::GroupComponent::outlineColourId, juce::Colour::fromRGB(65, 73, 88));
-    mapLeftGroup.setColour(juce::GroupComponent::textColourId, juce::Colour::fromRGB(231, 235, 242));
+    mapLeftGroup.setColour(juce::GroupComponent::outlineColourId, kThemeOutline);
+    mapLeftGroup.setColour(juce::GroupComponent::textColourId, kThemeTextStrong);
     addAndMakeVisible(mapLeftGroup);
 
     mapRightGroup.setText("Right Speaker");
-    mapRightGroup.setColour(juce::GroupComponent::outlineColourId, juce::Colour::fromRGB(65, 73, 88));
-    mapRightGroup.setColour(juce::GroupComponent::textColourId, juce::Colour::fromRGB(231, 235, 242));
+    mapRightGroup.setColour(juce::GroupComponent::outlineColourId, kThemeOutline);
+    mapRightGroup.setColour(juce::GroupComponent::textColourId, kThemeTextStrong);
     addAndMakeVisible(mapRightGroup);
 
     addAndMakeVisible(leftWaveformViewer);
     addAndMakeVisible(rightWaveformViewer);
 
     masterGroup.setText("Master");
-    masterGroup.setColour(juce::GroupComponent::outlineColourId, juce::Colour::fromRGB(65, 73, 88));
-    masterGroup.setColour(juce::GroupComponent::textColourId, juce::Colour::fromRGB(231, 235, 242));
+    masterGroup.setColour(juce::GroupComponent::outlineColourId, kThemeOutline);
+    masterGroup.setColour(juce::GroupComponent::textColourId, kThemeTextStrong);
     addAndMakeVisible(masterGroup);
 
     adsrGroup.setText("ADSR Envelope");
-    adsrGroup.setColour(juce::GroupComponent::outlineColourId, juce::Colour::fromRGB(65, 73, 88));
-    adsrGroup.setColour(juce::GroupComponent::textColourId, juce::Colour::fromRGB(231, 235, 242));
+    adsrGroup.setColour(juce::GroupComponent::outlineColourId, kThemeOutline);
+    adsrGroup.setColour(juce::GroupComponent::textColourId, kThemeTextStrong);
     addAndMakeVisible(adsrGroup);
 
     driftGroup.setText("Drift");
-    driftGroup.setColour(juce::GroupComponent::outlineColourId, juce::Colour::fromRGB(65, 73, 88));
-    driftGroup.setColour(juce::GroupComponent::textColourId, juce::Colour::fromRGB(231, 235, 242));
+    driftGroup.setColour(juce::GroupComponent::outlineColourId, kThemeOutline);
+    driftGroup.setColour(juce::GroupComponent::textColourId, kThemeTextStrong);
     addAndMakeVisible(driftGroup);
 
     attackAttachment = std::make_unique<SliderAttachment>(
@@ -1284,20 +1447,20 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
         audioProcessor.parameters, "liveNoteDrift", liveNoteDriftSlider);
 
     scanXAttachment = std::make_unique<SliderAttachment>(
-        audioProcessor.parameters, "scanX", scanXSlider);
+        audioProcessor.parameters, "lineX1", scanXSlider);
     scanYAttachment = std::make_unique<SliderAttachment>(
-        audioProcessor.parameters, "scanY", scanYSlider);
+        audioProcessor.parameters, "lineY1", scanYSlider);
     scanLengthAttachment = std::make_unique<SliderAttachment>(
-        audioProcessor.parameters, "scanLength", scanLengthSlider);
+        audioProcessor.parameters, "lineX2", scanLengthSlider);
     scanAngleAttachment = std::make_unique<SliderAttachment>(
-        audioProcessor.parameters, "scanAngle", scanAngleSlider);
+        audioProcessor.parameters, "lineY2", scanAngleSlider);
     scannerModeAttachment = std::make_unique<ComboBoxAttachment>(
         audioProcessor.parameters, "scannerMode", scannerModeCombo);
     randomPhaseAttachment = std::make_unique<ButtonAttachment>(
         audioProcessor.parameters, "randomPhase", randomPhaseButton);
     scanResolutionLabel.setText("Resolution", juce::dontSendNotification);
     scanResolutionLabel.setJustificationType(juce::Justification::centredLeft);
-    scanResolutionLabel.setColour(juce::Label::textColourId, juce::Colour::fromRGB(214, 219, 230));
+    scanResolutionLabel.setColour(juce::Label::textColourId, kThemeText);
     addAndMakeVisible(scanResolutionLabel);
     scanResolutionCombo.addItem("32", 1);
     scanResolutionCombo.addItem("64", 2);
@@ -1354,18 +1517,18 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
     setupSectionLabel(modulationTitleLabel, "Modulation");
 
     modulationLfoGroup.setText("LFO Section");
-    modulationLfoGroup.setColour(juce::GroupComponent::outlineColourId, juce::Colour::fromRGB(65, 73, 88));
-    modulationLfoGroup.setColour(juce::GroupComponent::textColourId, juce::Colour::fromRGB(231, 235, 242));
+    modulationLfoGroup.setColour(juce::GroupComponent::outlineColourId, kThemeOutline);
+    modulationLfoGroup.setColour(juce::GroupComponent::textColourId, kThemeTextStrong);
     addAndMakeVisible(modulationLfoGroup);
 
     modulationRoutingGroup.setText("Routing Section");
-    modulationRoutingGroup.setColour(juce::GroupComponent::outlineColourId, juce::Colour::fromRGB(65, 73, 88));
-    modulationRoutingGroup.setColour(juce::GroupComponent::textColourId, juce::Colour::fromRGB(231, 235, 242));
+    modulationRoutingGroup.setColour(juce::GroupComponent::outlineColourId, kThemeOutline);
+    modulationRoutingGroup.setColour(juce::GroupComponent::textColourId, kThemeTextStrong);
     addAndMakeVisible(modulationRoutingGroup);
 
     modResponseLabel.setText("Response", juce::dontSendNotification);
     modResponseLabel.setJustificationType(juce::Justification::centredLeft);
-    modResponseLabel.setColour(juce::Label::textColourId, juce::Colour::fromRGB(214, 219, 230));
+    modResponseLabel.setColour(juce::Label::textColourId, kThemeText);
     routeSettingsTabPage.addAndMakeVisible(modResponseLabel);
     modResponseSlider.setSliderStyle(juce::Slider::LinearHorizontal);
     modResponseSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 62, 20);
@@ -1375,27 +1538,27 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
     {
         routeColumnHeaderSource[static_cast<size_t>(pageIndex)].setText("Source", juce::dontSendNotification);
         routeColumnHeaderSource[static_cast<size_t>(pageIndex)].setJustificationType(juce::Justification::centredLeft);
-        routeColumnHeaderSource[static_cast<size_t>(pageIndex)].setColour(juce::Label::textColourId, juce::Colour::fromRGB(214, 219, 230));
+        routeColumnHeaderSource[static_cast<size_t>(pageIndex)].setColour(juce::Label::textColourId, kThemeText);
         routeTabPages[static_cast<size_t>(pageIndex)].addAndMakeVisible(routeColumnHeaderSource[static_cast<size_t>(pageIndex)]);
 
         routeColumnHeaderDestination[static_cast<size_t>(pageIndex)].setText("Destination", juce::dontSendNotification);
         routeColumnHeaderDestination[static_cast<size_t>(pageIndex)].setJustificationType(juce::Justification::centredLeft);
-        routeColumnHeaderDestination[static_cast<size_t>(pageIndex)].setColour(juce::Label::textColourId, juce::Colour::fromRGB(214, 219, 230));
+        routeColumnHeaderDestination[static_cast<size_t>(pageIndex)].setColour(juce::Label::textColourId, kThemeText);
         routeTabPages[static_cast<size_t>(pageIndex)].addAndMakeVisible(routeColumnHeaderDestination[static_cast<size_t>(pageIndex)]);
 
         routeColumnHeaderBipolar[static_cast<size_t>(pageIndex)].setText("bip.", juce::dontSendNotification);
         routeColumnHeaderBipolar[static_cast<size_t>(pageIndex)].setJustificationType(juce::Justification::centred);
-        routeColumnHeaderBipolar[static_cast<size_t>(pageIndex)].setColour(juce::Label::textColourId, juce::Colour::fromRGB(214, 219, 230));
+        routeColumnHeaderBipolar[static_cast<size_t>(pageIndex)].setColour(juce::Label::textColourId, kThemeText);
         routeTabPages[static_cast<size_t>(pageIndex)].addAndMakeVisible(routeColumnHeaderBipolar[static_cast<size_t>(pageIndex)]);
 
         routeColumnHeaderAmount[static_cast<size_t>(pageIndex)].setText("Modulation", juce::dontSendNotification);
         routeColumnHeaderAmount[static_cast<size_t>(pageIndex)].setJustificationType(juce::Justification::centredLeft);
-        routeColumnHeaderAmount[static_cast<size_t>(pageIndex)].setColour(juce::Label::textColourId, juce::Colour::fromRGB(214, 219, 230));
+        routeColumnHeaderAmount[static_cast<size_t>(pageIndex)].setColour(juce::Label::textColourId, kThemeText);
         routeTabPages[static_cast<size_t>(pageIndex)].addAndMakeVisible(routeColumnHeaderAmount[static_cast<size_t>(pageIndex)]);
     }
     uiZoomLabel.setText("UI Zoom", juce::dontSendNotification);
     uiZoomLabel.setJustificationType(juce::Justification::centredRight);
-    uiZoomLabel.setColour(juce::Label::textColourId, juce::Colour::fromRGB(214, 219, 230));
+    uiZoomLabel.setColour(juce::Label::textColourId, kThemeText);
     addAndMakeVisible(uiZoomLabel);
     uiZoomCombo.setEditableText(true);
     uiZoomCombo.addItem("25%", 1);
@@ -1409,7 +1572,7 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
 
     polyphonyLabel.setText("Polyphony", juce::dontSendNotification);
     polyphonyLabel.setJustificationType(juce::Justification::centredRight);
-    polyphonyLabel.setColour(juce::Label::textColourId, juce::Colour::fromRGB(214, 219, 230));
+    polyphonyLabel.setColour(juce::Label::textColourId, kThemeText);
     addAndMakeVisible(polyphonyLabel);
     polyphonyCombo.addItem("4", 1);
     polyphonyCombo.addItem("8", 2);
@@ -1420,6 +1583,18 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
     polyphonyCombo.addItem("48", 7);
     polyphonyCombo.addItem("64", 8);
     addAndMakeVisible(polyphonyCombo);
+
+    themeLabel.setText("Theme", juce::dontSendNotification);
+    themeLabel.setJustificationType(juce::Justification::centredRight);
+    themeLabel.setColour(juce::Label::textColourId, kThemeText);
+    addAndMakeVisible(themeLabel);
+    themeCombo.addItem("Red", 2);
+    themeCombo.addItem("Green", 1);
+    themeCombo.addItem("Blue", 3);
+    themeCombo.addItem("Browngrey", 4);
+    themeCombo.onChange = [this] { applyThemeSelection(); };
+    themeCombo.setSelectedId(1, juce::dontSendNotification);
+    addAndMakeVisible(themeCombo);
     polyphonyAttachment = std::make_unique<ComboBoxAttachment>(
         audioProcessor.parameters, "maxVoices", polyphonyCombo);
     modResponseAttachment = std::make_unique<SliderAttachment>(
@@ -1441,11 +1616,11 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
     lfoTabs.setColour(juce::TabbedComponent::backgroundColourId, getLfoContentBackgroundForIndex(0));
 
     addAndMakeVisible(routeTabs);
-    routeTabs.addTab("Route 1-8", juce::Colour::fromRGB(44, 50, 62), &routeTabPages[0], false);
-    routeTabs.addTab("Route 9-16", juce::Colour::fromRGB(44, 50, 62), &routeTabPages[1], false);
-    routeTabs.addTab("Route 17-24", juce::Colour::fromRGB(44, 50, 62), &routeTabPages[2], false);
-    routeTabs.addTab("Route 25-32", juce::Colour::fromRGB(44, 50, 62), &routeTabPages[3], false);
-    routeTabs.addTab("Routing Settings", juce::Colour::fromRGB(44, 50, 62), &routeSettingsTabPage, false);
+    routeTabs.addTab("Route 1-8", kThemeTab, &routeTabPages[0], false);
+    routeTabs.addTab("Route 9-16", kThemeTab, &routeTabPages[1], false);
+    routeTabs.addTab("Route 17-24", kThemeTab, &routeTabPages[2], false);
+    routeTabs.addTab("Route 25-32", kThemeTab, &routeTabPages[3], false);
+    routeTabs.addTab("Routing Settings", kThemeTab, &routeSettingsTabPage, false);
 
     setupRotarySlider(lfoRateSlider, "LFO Rate");
     setupRotarySlider(lfoDepthSlider, "LFO Depth");
@@ -1458,7 +1633,7 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
 
     lfoWaveLabel.setText("Wave", juce::dontSendNotification);
     lfoWaveLabel.setJustificationType(juce::Justification::centredLeft);
-    lfoWaveLabel.setColour(juce::Label::textColourId, juce::Colour::fromRGB(214, 219, 230));
+    lfoWaveLabel.setColour(juce::Label::textColourId, kThemeText);
     lfoTabPage.addAndMakeVisible(lfoWaveLabel);
     lfoWaveCombo.addItem("Sine", 1);
     lfoWaveCombo.addItem("Triangle", 2);
@@ -1473,14 +1648,14 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
     };
     lfoTabPage.addAndMakeVisible(lfoWaveCombo);
 
-    lfoSyncButton.setColour(juce::ToggleButton::textColourId, juce::Colour::fromRGB(214, 219, 230));
+    lfoSyncButton.setColour(juce::ToggleButton::textColourId, kThemeText);
     lfoSyncButton.onClick = [this]
     {
         rebuildActiveLfoAttachments();
         configureModeSpecificResetBehaviour();
     };
     lfoTabPage.addAndMakeVisible(lfoSyncButton);
-    lfoRandomPhasePerVoiceButton.setColour(juce::ToggleButton::textColourId, juce::Colour::fromRGB(214, 219, 230));
+    lfoRandomPhasePerVoiceButton.setColour(juce::ToggleButton::textColourId, kThemeText);
     lfoTabPage.addAndMakeVisible(lfoRandomPhasePerVoiceButton);
     lfoTabPage.addAndMakeVisible(lfoVisualizer);
 
@@ -1491,7 +1666,7 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
         const auto routeNumber = i + 1;
 
         modEnabledButtons[static_cast<size_t>(i)].setButtonText("On");
-        modEnabledButtons[static_cast<size_t>(i)].setColour(juce::ToggleButton::textColourId, juce::Colour::fromRGB(214, 219, 230));
+        modEnabledButtons[static_cast<size_t>(i)].setColour(juce::ToggleButton::textColourId, kThemeText);
         page.addAndMakeVisible(modEnabledButtons[static_cast<size_t>(i)]);
 
         if (auto* sourceParam = dynamic_cast<juce::AudioParameterChoice*>(audioProcessor.parameters.getParameter("mod1Source")))
@@ -1525,7 +1700,7 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
 
         modRowLabels[static_cast<size_t>(i)].setText("Route " + juce::String(routeNumber), juce::dontSendNotification);
         modRowLabels[static_cast<size_t>(i)].setJustificationType(juce::Justification::centredLeft);
-        modRowLabels[static_cast<size_t>(i)].setColour(juce::Label::textColourId, juce::Colour::fromRGB(214, 219, 230));
+        modRowLabels[static_cast<size_t>(i)].setColour(juce::Label::textColourId, kThemeText);
         page.addAndMakeVisible(modRowLabels[static_cast<size_t>(i)]);
 
         const auto idx = juce::String(i + 1);
@@ -1642,7 +1817,7 @@ void PictureWaveSynthAudioProcessorEditor::setupSmallLabel(juce::Label& label, c
 {
     label.setText(text, juce::dontSendNotification);
     label.setJustificationType(juce::Justification::centred);
-    label.setColour(juce::Label::textColourId, juce::Colour::fromRGB(214, 219, 230));
+    label.setColour(juce::Label::textColourId, kThemeText);
     addAndMakeVisible(label);
 }
 
@@ -1650,7 +1825,7 @@ void PictureWaveSynthAudioProcessorEditor::setupSectionLabel(juce::Label& label,
 {
     label.setText(text, juce::dontSendNotification);
     label.setJustificationType(juce::Justification::centredLeft);
-    label.setColour(juce::Label::textColourId, juce::Colour::fromRGB(239, 242, 247));
+    label.setColour(juce::Label::textColourId, kThemeHeadingText);
     label.setFont(juce::FontOptions(15.0f, juce::Font::bold));
     addAndMakeVisible(label);
 }
@@ -1707,7 +1882,7 @@ void PictureWaveSynthAudioProcessorEditor::setupMappingSlider(juce::Slider& slid
 
     label.setText(name, juce::dontSendNotification);
     label.setJustificationType(juce::Justification::centred);
-    label.setColour(juce::Label::textColourId, juce::Colour::fromRGB(214, 219, 230));
+    label.setColour(juce::Label::textColourId, kThemeText);
     addAndMakeVisible(label);
 }
 
@@ -1752,10 +1927,10 @@ void PictureWaveSynthAudioProcessorEditor::configureResetBehaviour()
     configureSliderReset(gainSlider, "gain");
     configureSliderReset(noteDriftSlider, "noteDrift");
     configureSliderReset(liveNoteDriftSlider, "liveNoteDrift");
-    configureSliderReset(scanXSlider, "scanX");
-    configureSliderReset(scanYSlider, "scanY");
-    configureSliderReset(scanLengthSlider, "scanLength");
-    configureSliderReset(scanAngleSlider, "scanAngle");
+    configureSliderReset(scanXSlider, "lineX1");
+    configureSliderReset(scanYSlider, "lineY1");
+    configureSliderReset(scanLengthSlider, "lineX2");
+    configureSliderReset(scanAngleSlider, "lineY2");
     configureSliderReset(mapRLSlider, "mapRL");
     configureSliderReset(mapGLSlider, "mapGL");
     configureSliderReset(mapBLSlider, "mapBL");
@@ -1974,10 +2149,10 @@ void PictureWaveSynthAudioProcessorEditor::refreshImagePreview()
 
     imagePreview.setScanner(
         mode,
-        audioProcessor.getEffectiveParameterValue("scanX"),
-        audioProcessor.getEffectiveParameterValue("scanY"),
-        audioProcessor.getEffectiveParameterValue("scanLength"),
-        audioProcessor.getEffectiveParameterValue("scanAngle"),
+        audioProcessor.getEffectiveParameterValue("lineX1"),
+        audioProcessor.getEffectiveParameterValue("lineY1"),
+        audioProcessor.getEffectiveParameterValue("lineX2"),
+        audioProcessor.getEffectiveParameterValue("lineY2"),
         audioProcessor.getEffectiveParameterValue("ovalX1"),
         audioProcessor.getEffectiveParameterValue("ovalY1"),
         audioProcessor.getEffectiveParameterValue("ovalX2"),
@@ -2000,7 +2175,7 @@ void PictureWaveSynthAudioProcessorEditor::refreshImagePreview()
 
 void PictureWaveSynthAudioProcessorEditor::paint(juce::Graphics& g)
 {
-    g.fillAll(juce::Colour::fromRGB(18, 21, 27));
+    g.fillAll(kThemeBackground);
 
     const auto safeScale = juce::jmax(0.01f, uiScaleFactor);
     const auto layoutWidth = static_cast<int>(std::round(static_cast<float>(getWidth()) / safeScale));
@@ -2016,7 +2191,7 @@ void PictureWaveSynthAudioProcessorEditor::paint(juce::Graphics& g)
     const int modulationTop = layoutHeight - bottomMargin - modulationHeight;
     const int midBlockHeight = juce::jmax(220, modulationTop - midBlockTop - blockGap);
 
-    g.setColour(juce::Colour::fromRGB(30, 35, 44));
+    g.setColour(kThemeTopPanel);
     g.fillRoundedRectangle(12.0f, static_cast<float>(topBlockTop), static_cast<float>(layoutWidth - 24), static_cast<float>(topBlockHeight), 8.0f);
 
     constexpr int kMidPanelLeftX = 12;
@@ -2024,13 +2199,13 @@ void PictureWaveSynthAudioProcessorEditor::paint(juce::Graphics& g)
     constexpr int kMapPanelWidth = 698;
     const int perfPanelX = kMidPanelLeftX + kMapPanelWidth + kMidPanelGap;
 
-    g.setColour(juce::Colour::fromRGB(29, 33, 42));
+    g.setColour(kThemeMidPanelLeft);
     g.fillRoundedRectangle(static_cast<float>(kMidPanelLeftX), static_cast<float>(midBlockTop), static_cast<float>(kMapPanelWidth), static_cast<float>(midBlockHeight), 8.0f);
 
-    g.setColour(juce::Colour::fromRGB(28, 32, 40));
+    g.setColour(kThemeMidPanelRight);
     g.fillRoundedRectangle(static_cast<float>(perfPanelX), static_cast<float>(midBlockTop), static_cast<float>(layoutWidth - perfPanelX - 12), static_cast<float>(midBlockHeight), 8.0f);
 
-    g.setColour(juce::Colour::fromRGB(27, 31, 39));
+    g.setColour(kThemeBottomPanel);
     g.fillRoundedRectangle(12.0f, static_cast<float>(modulationTop), static_cast<float>(layoutWidth - 24), static_cast<float>(modulationHeight), 8.0f);
 }
 
@@ -2366,8 +2541,10 @@ void PictureWaveSynthAudioProcessorEditor::resized()
 
     polyphonyLabel.setBounds(24, 56, 90, 22);
     polyphonyCombo.setBounds(118, 56, 66, 24);
-    uiZoomLabel.setBounds(198, 56, 74, 22);
-    uiZoomCombo.setBounds(278, 56, 96, 24);
+    themeLabel.setBounds(192, 56, 64, 22);
+    themeCombo.setBounds(260, 56, 118, 24);
+    uiZoomLabel.setBounds(386, 56, 74, 22);
+    uiZoomCombo.setBounds(464, 56, 96, 24);
     aboutButton.setBounds(layoutWidth - 100, 56, 76, 24);
 
     storeEditorGeometryToState();
@@ -2461,10 +2638,10 @@ void PictureWaveSynthAudioProcessorEditor::refreshModulationVisuals()
     updateSlider(noteDriftSlider, "noteDrift");
     updateSlider(liveNoteDriftSlider, "liveNoteDrift");
 
-    updateSlider(scanXSlider, "scanX");
-    updateSlider(scanYSlider, "scanY");
-    updateSlider(scanLengthSlider, "scanLength");
-    updateSlider(scanAngleSlider, "scanAngle");
+    updateSlider(scanXSlider, "lineX1");
+    updateSlider(scanYSlider, "lineY1");
+    updateSlider(scanLengthSlider, "lineX2");
+    updateSlider(scanAngleSlider, "lineY2");
 
     updateSlider(mapRLSlider, "mapRL");
     updateSlider(mapGLSlider, "mapGL");
@@ -2681,12 +2858,177 @@ void PictureWaveSynthAudioProcessorEditor::applyGlobalWidgetScale()
     }
 }
 
+void PictureWaveSynthAudioProcessorEditor::applyThemeSelection(bool storeState)
+{
+    auto selectedId = themeCombo.getSelectedId();
+    if (selectedId <= 0)
+    {
+        selectedId = 1;
+        themeCombo.setSelectedId(selectedId, juce::dontSendNotification);
+    }
+
+    applyThemePaletteByIndex(selectedId);
+    applyThemeToComponents();
+    repaint();
+
+    if (storeState)
+    {
+        storeEditorGeometryToState();
+    }
+}
+
+void PictureWaveSynthAudioProcessorEditor::applyThemeToComponents()
+{
+    titleLabel.setColour(juce::Label::textColourId, kThemeHeadingText);
+
+    const auto applyLabelColour = [](juce::Label& label, juce::Colour colour)
+    {
+        label.setColour(juce::Label::textColourId, colour);
+    };
+
+    const auto applyGroupColours = [](juce::GroupComponent& group)
+    {
+        group.setColour(juce::GroupComponent::outlineColourId, kThemeOutline);
+        group.setColour(juce::GroupComponent::textColourId, kThemeTextStrong);
+    };
+
+    const auto applyToggleText = [](juce::Button& button)
+    {
+        button.setColour(juce::ToggleButton::textColourId, kThemeText);
+    };
+
+    const auto applyComboColours = [](juce::ComboBox& combo)
+    {
+        combo.setColour(juce::ComboBox::backgroundColourId, kThemeImagePlaceholder.withAlpha(0.65f));
+        combo.setColour(juce::ComboBox::outlineColourId, kThemeOutline.withAlpha(0.85f));
+        combo.setColour(juce::ComboBox::textColourId, kThemeTextStrong);
+        combo.setColour(juce::ComboBox::arrowColourId, kThemeText);
+    };
+
+    applyLabelColour(scannerTitleLabel, kThemeHeadingText);
+    applyLabelColour(mappingTitleLabel, kThemeHeadingText);
+    applyLabelColour(envTitleLabel, kThemeHeadingText);
+    applyLabelColour(modulationTitleLabel, kThemeHeadingText);
+
+    applyLabelColour(imageStatusLabel, kThemeTextMuted);
+    applyLabelColour(scannerModeLabel, kThemeText);
+    applyLabelColour(scanResolutionLabel, kThemeText);
+    applyLabelColour(envTypeLabel, kThemeText);
+    applyLabelColour(polyphonyLabel, kThemeText);
+    applyLabelColour(themeLabel, kThemeText);
+    applyLabelColour(uiZoomLabel, kThemeText);
+    applyLabelColour(modResponseLabel, kThemeText);
+    applyLabelColour(lfoWaveLabel, kThemeText);
+
+    applyLabelColour(fxFilterTypeLabel, kThemeText);
+    applyLabelColour(fxFilterCutoffLabel, kThemeText);
+    applyLabelColour(fxFilterResonanceLabel, kThemeText);
+    applyLabelColour(fxFilterGainLabel, kThemeText);
+    applyLabelColour(reverbRoomSizeLabel, kThemeText);
+    applyLabelColour(reverbDampingLabel, kThemeText);
+    applyLabelColour(reverbWidthLabel, kThemeText);
+    applyLabelColour(reverbWetLabel, kThemeText);
+    applyLabelColour(reverbDryLabel, kThemeText);
+
+    applyLabelColour(attackLabel, kThemeText);
+    applyLabelColour(decayLabel, kThemeText);
+    applyLabelColour(sustainLabel, kThemeText);
+    applyLabelColour(releaseLabel, kThemeText);
+    applyLabelColour(gainLabel, kThemeText);
+    applyLabelColour(noteDriftLabel, kThemeText);
+    applyLabelColour(liveNoteDriftLabel, kThemeText);
+
+    applyLabelColour(scanXLabel, kThemeText);
+    applyLabelColour(scanYLabel, kThemeText);
+    applyLabelColour(scanLengthLabel, kThemeText);
+    applyLabelColour(scanAngleLabel, kThemeText);
+    applyLabelColour(shapeCtrl1Label, kThemeText);
+    applyLabelColour(shapeCtrl2Label, kThemeText);
+    applyLabelColour(shapeCtrl3Label, kThemeText);
+    applyLabelColour(shapeCtrl4Label, kThemeText);
+    applyLabelColour(shapeCtrl5Label, kThemeText);
+    applyLabelColour(shapeCtrl6Label, kThemeText);
+
+    applyLabelColour(mapRLLabel, kThemeText);
+    applyLabelColour(mapGLLabel, kThemeText);
+    applyLabelColour(mapBLLabel, kThemeText);
+    applyLabelColour(mapALLabel, kThemeText);
+    applyLabelColour(mapRRLabel, kThemeText);
+    applyLabelColour(mapGRLabel, kThemeText);
+    applyLabelColour(mapBRLabel, kThemeText);
+    applyLabelColour(mapARLabel, kThemeText);
+
+    for (int i = 0; i < kNumRoutePages; ++i)
+    {
+        applyLabelColour(routeColumnHeaderSource[static_cast<size_t>(i)], kThemeText);
+        applyLabelColour(routeColumnHeaderDestination[static_cast<size_t>(i)], kThemeText);
+        applyLabelColour(routeColumnHeaderBipolar[static_cast<size_t>(i)], kThemeText);
+        applyLabelColour(routeColumnHeaderAmount[static_cast<size_t>(i)], kThemeText);
+    }
+
+    for (auto& label : modRowLabels)
+    {
+        applyLabelColour(label, kThemeText);
+    }
+
+    applyGroupColours(mapLeftGroup);
+    applyGroupColours(mapRightGroup);
+    applyGroupColours(masterGroup);
+    applyGroupColours(adsrGroup);
+    applyGroupColours(driftGroup);
+    applyGroupColours(fxFilterGroup);
+    applyGroupColours(reverbGroup);
+    applyGroupColours(modulationLfoGroup);
+    applyGroupColours(modulationRoutingGroup);
+
+    applyToggleText(scanSplineInterpolationButton);
+    applyToggleText(randomPhaseButton);
+    applyToggleText(propTempoSyncButton);
+    applyToggleText(lfoSyncButton);
+    applyToggleText(lfoRandomPhasePerVoiceButton);
+    applyToggleText(reverbFreezeButton);
+    for (auto& button : modEnabledButtons)
+    {
+        applyToggleText(button);
+    }
+
+    applyComboColours(scannerModeCombo);
+    applyComboColours(scanResolutionCombo);
+    applyComboColours(fxFilterTypeCombo);
+    applyComboColours(envTypeCombo);
+    applyComboColours(polyphonyCombo);
+    applyComboColours(themeCombo);
+    applyComboColours(uiZoomCombo);
+    applyComboColours(lfoWaveCombo);
+    for (auto& combo : modSourceCombos)
+    {
+        applyComboColours(combo);
+    }
+    for (auto& combo : modTargetCombos)
+    {
+        applyComboColours(combo);
+    }
+
+    for (int i = 0; i < scannerTabs.getNumTabs(); ++i)
+    {
+        scannerTabs.getTabbedButtonBar().setTabBackgroundColour(i, kThemeTab);
+    }
+    for (int i = 0; i < routeTabs.getNumTabs(); ++i)
+    {
+        routeTabs.getTabbedButtonBar().setTabBackgroundColour(i, kThemeTab);
+    }
+}
+
 bool PictureWaveSynthAudioProcessorEditor::restoreEditorGeometryFromState()
 {
     auto& state = audioProcessor.parameters.state;
     const auto storedScale = static_cast<float>(state.getProperty("editorUiScale", 0.75f));
+    const auto storedThemeId = static_cast<int>(state.getProperty("editorThemeId", 1));
     const auto storedWidth = static_cast<int>(state.getProperty("editorWindowWidth", 0));
     const auto storedHeight = static_cast<int>(state.getProperty("editorWindowHeight", 0));
+
+    themeCombo.setSelectedId(juce::jlimit(1, 4, storedThemeId), juce::dontSendNotification);
+    applyThemeSelection(false);
 
     const auto setZoomSelectionForScale = [this](float scale)
     {
@@ -2732,6 +3074,7 @@ void PictureWaveSynthAudioProcessorEditor::storeEditorGeometryToState()
     state.setProperty("editorWindowWidth", getWidth(), nullptr);
     state.setProperty("editorWindowHeight", getHeight(), nullptr);
     state.setProperty("editorUiScale", uiScaleFactor, nullptr);
+    state.setProperty("editorThemeId", themeCombo.getSelectedId(), nullptr);
 }
 
 void PictureWaveSynthAudioProcessorEditor::rebuildModeAttachments()
@@ -2811,10 +3154,10 @@ void PictureWaveSynthAudioProcessorEditor::updateModeControlLabelsAndVisibility(
 
     if (mode == 1)
     {
-        scanXLabel.setText("Line X", juce::dontSendNotification);
-        scanYLabel.setText("Line Y", juce::dontSendNotification);
-        scanLengthLabel.setText("Line Length", juce::dontSendNotification);
-        scanAngleLabel.setText("Line Angle", juce::dontSendNotification);
+        scanXLabel.setText("Line X1", juce::dontSendNotification);
+        scanYLabel.setText("Line Y1", juce::dontSendNotification);
+        scanLengthLabel.setText("Line X2", juce::dontSendNotification);
+        scanAngleLabel.setText("Line Y2", juce::dontSendNotification);
 
         setControlVisibility(scanXSlider, scanXLabel, true);
         setControlVisibility(scanYSlider, scanYLabel, true);

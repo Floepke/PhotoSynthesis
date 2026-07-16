@@ -30,10 +30,10 @@ private:
         void setImage(juce::Image newImage);
         void setScanner(
             int mode,
-            float lineX,
-            float lineY,
-            float lineLength,
-            float lineAngleDegrees,
+            float lineX1,
+            float lineY1,
+            float lineX2,
+            float lineY2,
             float ovalX1,
             float ovalY1,
             float ovalX2,
@@ -91,10 +91,10 @@ private:
         ParameterChangeCallback parameterChangeCallback;
         DragHandle activeHandle = DragHandle::none;
         int scannerMode = 0;
-        float lineX = 0.5f;
-        float lineY = 0.5f;
-        float lineLength = 0.7f;
-        float lineAngle = 0.0f;
+        float lineX1 = 0.2f;
+        float lineY1 = 0.5f;
+        float lineX2 = 0.8f;
+        float lineY2 = 0.5f;
         float ovalX1 = 0.3f;
         float ovalY1 = 0.3f;
         float ovalX2 = 0.7f;
@@ -344,6 +344,8 @@ private:
     ResettableComboBox uiZoomCombo;
     juce::Label polyphonyLabel;
     ResettableComboBox polyphonyCombo;
+    juce::Label themeLabel;
+    ResettableComboBox themeCombo;
     juce::Label modulationTitleLabel;
     juce::GroupComponent modulationLfoGroup;
     juce::GroupComponent modulationRoutingGroup;
@@ -473,6 +475,8 @@ private:
     void updateFxFilterControlState();
     void updateEnvelopeControlState();
     void updateModeControlLabelsAndVisibility();
+    void applyThemeSelection(bool storeState = true);
+    void applyThemeToComponents();
     bool restoreEditorGeometryFromState();
     void storeEditorGeometryToState();
     std::pair<int, int> getIdealEditorSizeForScale(float scale) const;

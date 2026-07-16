@@ -32,7 +32,7 @@ const std::array<int, 7> kScanResolutionValues{ 32, 64, 128, 256, 512, 1024, 204
 
 const std::array<const char*, 37> kModTargetParamIds{
     "attack", "decay", "sustain", "release", "gain", "noteDrift", "liveNoteDrift",
-    "scanX", "scanY", "scanLength", "scanAngle",
+    "lineX1", "lineY1", "lineX2", "lineY2",
     "ovalX1", "ovalY1", "ovalX2", "ovalY2",
     "rectX", "rectY", "rectWidth", "rectHeight",
     "triX1", "triY1", "triX2", "triY2", "triX3", "triY3",
@@ -43,7 +43,7 @@ const std::array<const char*, 37> kModTargetParamIds{
 const std::array<const char*, 38> kModTargetNames{
     "None",
     "Attack", "Decay", "Sustain", "Release", "Gain", "Note Drift", "Drift Freq",
-    "Line X", "Line Y", "Line Length", "Line Angle",
+    "Line X1", "Line Y1", "Line X2", "Line Y2",
     "Oval X1", "Oval Y1", "Oval X2", "Oval Y2",
     "Rect X", "Rect Y", "Rect Width", "Rect Height",
     "Tri X1", "Tri Y1", "Tri X2", "Tri Y2", "Tri X3", "Tri Y3",
@@ -925,10 +925,10 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
     const auto liveNoteDriftHz = readParam("liveNoteDrift", true);
 
     ScannerParams scanner;
-    scanner.x = readParam("scanX", true);
-    scanner.y = readParam("scanY", true);
-    scanner.length = readParam("scanLength", true);
-    scanner.angleDegrees = readParam("scanAngle", true);
+    scanner.lineX1 = readParam("lineX1", true);
+    scanner.lineY1 = readParam("lineY1", true);
+    scanner.lineX2 = readParam("lineX2", true);
+    scanner.lineY2 = readParam("lineY2", true);
     scanner.scanResolution = juce::jlimit(0, static_cast<int>(kScanResolutionValues.size()) - 1,
                                           static_cast<int>(std::lround(parameters.getRawParameterValue("scanResolution")->load())));
     scanner.useSplineInterpolation = parameters.getRawParameterValue("scanSplineInterpolation")->load() > 0.5f;
@@ -1074,10 +1074,10 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
             return effectiveDisplayValues[static_cast<size_t>(index)].load();
         };
 
-        previewScanner.x = readPreviewParam("scanX", previewScanner.x);
-        previewScanner.y = readPreviewParam("scanY", previewScanner.y);
-        previewScanner.length = readPreviewParam("scanLength", previewScanner.length);
-        previewScanner.angleDegrees = readPreviewParam("scanAngle", previewScanner.angleDegrees);
+        previewScanner.lineX1 = readPreviewParam("lineX1", previewScanner.lineX1);
+        previewScanner.lineY1 = readPreviewParam("lineY1", previewScanner.lineY1);
+        previewScanner.lineX2 = readPreviewParam("lineX2", previewScanner.lineX2);
+        previewScanner.lineY2 = readPreviewParam("lineY2", previewScanner.lineY2);
         previewScanner.ovalX1 = readPreviewParam("ovalX1", previewScanner.ovalX1);
         previewScanner.ovalY1 = readPreviewParam("ovalY1", previewScanner.ovalY1);
         previewScanner.ovalX2 = readPreviewParam("ovalX2", previewScanner.ovalX2);
@@ -1231,10 +1231,10 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
                 auto voiceScanner = scanner;
                 if (hasPerVoiceVariableScannerRoutes)
                 {
-                    voiceScanner.x = readVoiceParam("scanX");
-                    voiceScanner.y = readVoiceParam("scanY");
-                    voiceScanner.length = readVoiceParam("scanLength");
-                    voiceScanner.angleDegrees = readVoiceParam("scanAngle");
+                    voiceScanner.lineX1 = readVoiceParam("lineX1");
+                    voiceScanner.lineY1 = readVoiceParam("lineY1");
+                    voiceScanner.lineX2 = readVoiceParam("lineX2");
+                    voiceScanner.lineY2 = readVoiceParam("lineY2");
                     voiceScanner.ovalX1 = readVoiceParam("ovalX1");
                     voiceScanner.ovalY1 = readVoiceParam("ovalY1");
                     voiceScanner.ovalX2 = readVoiceParam("ovalX2");
@@ -1539,13 +1539,13 @@ PictureWaveSynthAudioProcessor::ParameterLayout PictureWaveSynthAudioProcessor::
         "modResponseMs", "Mod Response", juce::NormalisableRange<float>(0.0f, 500.0f, 0.1f), 25.0f));
 
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "scanX", "Line X", juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.5f));
+        "lineX1", "Line X1", juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.2f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "scanY", "Line Y", juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.5f));
+        "lineY1", "Line Y1", juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.5f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "scanLength", "Line Length", juce::NormalisableRange<float>(0.05f, 1.5f, 0.001f), 0.7f));
+        "lineX2", "Line X2", juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.8f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "scanAngle", "Line Angle", juce::NormalisableRange<float>(-180.0f, 180.0f, 0.1f), 0.0f));
+        "lineY2", "Line Y2", juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.5f));
     params.push_back(std::make_unique<juce::AudioParameterChoice>(
         "scanResolution", "Scan Resolution", juce::StringArray{ "32", "64", "128", "256", "512", "1024", "2048" }, 1));
     params.push_back(std::make_unique<juce::AudioParameterBool>(
@@ -2119,12 +2119,10 @@ std::array<float, 2> PictureWaveSynthAudioProcessor::sampleScannerPoint(const Sc
         return { startX + dx * tt, startY + dy * tt };
     }
 
-    const auto angleRadians = juce::degreesToRadians(scanner.angleDegrees);
-    const auto dx = std::cos(angleRadians) * scanner.length;
-    const auto dy = std::sin(angleRadians) * scanner.length;
-    const auto startX = scanner.x - 0.5f * static_cast<float>(dx);
-    const auto startY = scanner.y - 0.5f * static_cast<float>(dy);
-    return { startX + static_cast<float>(dx) * tt, startY + static_cast<float>(dy) * tt };
+    return {
+        linearInterpolate(scanner.lineX1, scanner.lineX2, tt),
+        linearInterpolate(scanner.lineY1, scanner.lineY2, tt)
+    };
 }
 
 std::array<float, 4> PictureWaveSynthAudioProcessor::sampleImageBilinear(const LoadedImageData& imageData, float u, float v)
@@ -2168,10 +2166,10 @@ std::array<float, 4> PictureWaveSynthAudioProcessor::sampleImageBilinear(const L
 bool PictureWaveSynthAudioProcessor::scannerParamsEqual(const ScannerParams& a, const ScannerParams& b)
 {
     return a.mode == b.mode
-        && juce::approximatelyEqual(a.x, b.x)
-        && juce::approximatelyEqual(a.y, b.y)
-        && juce::approximatelyEqual(a.length, b.length)
-        && juce::approximatelyEqual(a.angleDegrees, b.angleDegrees)
+        && juce::approximatelyEqual(a.lineX1, b.lineX1)
+        && juce::approximatelyEqual(a.lineY1, b.lineY1)
+        && juce::approximatelyEqual(a.lineX2, b.lineX2)
+        && juce::approximatelyEqual(a.lineY2, b.lineY2)
         && a.scanResolution == b.scanResolution
         && a.useSplineInterpolation == b.useSplineInterpolation
         && juce::approximatelyEqual(a.ovalX1, b.ovalX1)
