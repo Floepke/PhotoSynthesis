@@ -1027,6 +1027,8 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
 
     setupSectionLabel(scannerTitleLabel, "Image Scanner");
     setupSectionLabel(mappingTitleLabel, "RGBA Mapping to Stereo (+/-)");
+    scanSplineInterpolationButton.setColour(juce::ToggleButton::textColourId, juce::Colour::fromRGB(214, 219, 230));
+    addAndMakeVisible(scanSplineInterpolationButton);
     setupSectionLabel(envTitleLabel, "Performance");
 
     addAndMakeVisible(scannerTabs);
@@ -1307,6 +1309,8 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
     addAndMakeVisible(scanResolutionCombo);
     scanResolutionAttachment = std::make_unique<ComboBoxAttachment>(
         audioProcessor.parameters, "scanResolution", scanResolutionCombo);
+    scanSplineInterpolationAttachment = std::make_unique<ButtonAttachment>(
+        audioProcessor.parameters, "scanSplineInterpolation", scanSplineInterpolationButton);
     propTempoSyncAttachment = std::make_unique<ButtonAttachment>(
         audioProcessor.parameters, "propTempoSync", propTempoSyncButton);
 
@@ -1777,6 +1781,7 @@ void PictureWaveSynthAudioProcessorEditor::configureResetBehaviour()
     configureComboReset(lfoWaveCombo, "lfo1Wave");
     configureComboReset(fxFilterTypeCombo, "fxFilterType");
     configureToggleReset(randomPhaseButton, "randomPhase");
+    configureToggleReset(scanSplineInterpolationButton, "scanSplineInterpolation");
     configureToggleReset(propTempoSyncButton, "propTempoSync");
     configureToggleReset(lfoSyncButton, "lfo1Sync");
     configureToggleReset(lfoRandomPhasePerVoiceButton, "lfo1RandomPhasePerVoice");
@@ -2176,7 +2181,8 @@ void PictureWaveSynthAudioProcessorEditor::resized()
     const int perfX = kMidPanelLeftX + kMapPanelWidth + kMidPanelGap;
     const int perfW = layoutWidth - perfX - 12;
 
-    mappingTitleLabel.setBounds(24, midBlockTop + 12, 340, 22);
+    mappingTitleLabel.setBounds(24, midBlockTop + 12, 318, 22);
+    scanSplineInterpolationButton.setBounds(348, midBlockTop + 12, 120, 22);
     envTitleLabel.setBounds(perfX + 12, midBlockTop + 12, 140, 22);
     envTypeLabel.setBounds(perfX + perfW - 152, midBlockTop + 8, 36, 22);
     envTypeCombo.setBounds(perfX + perfW - 110, midBlockTop + 6, 98, 24);

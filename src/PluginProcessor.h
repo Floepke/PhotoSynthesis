@@ -205,6 +205,7 @@ private:
         float propSize = 0.8f;
         float propSpeed = 0.0f;
         int scanResolution = 3;
+        bool useSplineInterpolation = false;
         int propSyncDivision = 2;
         bool propTempoSync = false;
         float mapRL = 1.0f;

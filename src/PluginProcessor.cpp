@@ -56,6 +56,17 @@ T linearInterpolate(T a, T b, T t)
     return a + (b - a) * t;
 }
 
+template <typename T>
+T catmullRomInterpolate(T p0, T p1, T p2, T p3, T t)
+{
+    const auto t2 = t * t;
+    const auto t3 = t2 * t;
+    return static_cast<T>(0.5) * ((static_cast<T>(2) * p1)
+        + (-p0 + p2) * t
+        + (static_cast<T>(2) * p0 - static_cast<T>(5) * p1 + static_cast<T>(4) * p2 - p3) * t2
+        + (-p0 + static_cast<T>(3) * p1 - static_cast<T>(3) * p2 + p3) * t3);
+}
+
 double propellorDivisionToBeatsPerCycle(int division)
 {
     const auto clamped = static_cast<size_t>(juce::jlimit(0, static_cast<int>(kSyncDivisionBeatsPerCycle.size()) - 1, division));
@@ -836,6 +847,7 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
     scanner.angleDegrees = readParam("scanAngle", true);
     scanner.scanResolution = juce::jlimit(0, static_cast<int>(kScanResolutionValues.size()) - 1,
                                           static_cast<int>(std::lround(parameters.getRawParameterValue("scanResolution")->load())));
+    scanner.useSplineInterpolation = parameters.getRawParameterValue("scanSplineInterpolation")->load() > 0.5f;
     scanner.mode = juce::jlimit(0, 4, static_cast<int>(std::lround(parameters.getRawParameterValue("scannerMode")->load())));
     scanner.ovalX1 = readParam("ovalX1", true);
     scanner.ovalY1 = readParam("ovalY1", true);
@@ -1444,6 +1456,8 @@ PictureWaveSynthAudioProcessor::ParameterLayout PictureWaveSynthAudioProcessor::
         "scanAngle", "Line Angle", juce::NormalisableRange<float>(-180.0f, 180.0f, 0.1f), 0.0f));
     params.push_back(std::make_unique<juce::AudioParameterChoice>(
         "scanResolution", "Scan Resolution", juce::StringArray{ "32", "64", "128", "256", "512", "1024", "2048" }, 1));
+    params.push_back(std::make_unique<juce::AudioParameterBool>(
+        "scanSplineInterpolation", "Scan Spline Interpolation", false));
     params.push_back(std::make_unique<juce::AudioParameterChoice>(
         "scannerMode", "Scanner Mode", juce::StringArray{ "Line", "Oval", "Rectangle", "Triangle", "Propellor" }, 0));
 
@@ -1870,10 +1884,34 @@ void PictureWaveSynthAudioProcessor::regenerateWaveTablesFromImage(const LoadedI
         const auto sourcePos = static_cast<float>(i) * static_cast<float>(sampleCount - 1)
             / static_cast<float>(juce::jmax(1, kWaveTableSize - 1));
         const auto indexA = juce::jlimit(0, sampleCount - 1, static_cast<int>(std::floor(sourcePos)));
-        const auto indexB = juce::jlimit(0, sampleCount - 1, indexA + 1);
         const auto frac = sourcePos - static_cast<float>(indexA);
-        outLeft[static_cast<size_t>(i)] = linearInterpolate(sampledLeft[static_cast<size_t>(indexA)], sampledLeft[static_cast<size_t>(indexB)], frac);
-        outRight[static_cast<size_t>(i)] = linearInterpolate(sampledRight[static_cast<size_t>(indexA)], sampledRight[static_cast<size_t>(indexB)], frac);
+
+        if (scanner.useSplineInterpolation)
+        {
+            const auto index0 = juce::jlimit(0, sampleCount - 1, indexA - 1);
+            const auto index1 = indexA;
+            const auto index2 = juce::jlimit(0, sampleCount - 1, indexA + 1);
+            const auto index3 = juce::jlimit(0, sampleCount - 1, indexA + 2);
+
+            outLeft[static_cast<size_t>(i)] = catmullRomInterpolate(
+                sampledLeft[static_cast<size_t>(index0)],
+                sampledLeft[static_cast<size_t>(index1)],
+                sampledLeft[static_cast<size_t>(index2)],
+                sampledLeft[static_cast<size_t>(index3)],
+                frac);
+            outRight[static_cast<size_t>(i)] = catmullRomInterpolate(
+                sampledRight[static_cast<size_t>(index0)],
+                sampledRight[static_cast<size_t>(index1)],
+                sampledRight[static_cast<size_t>(index2)],
+                sampledRight[static_cast<size_t>(index3)],
+                frac);
+        }
+        else
+        {
+            const auto indexB = juce::jlimit(0, sampleCount - 1, indexA + 1);
+            outLeft[static_cast<size_t>(i)] = linearInterpolate(sampledLeft[static_cast<size_t>(indexA)], sampledLeft[static_cast<size_t>(indexB)], frac);
+            outRight[static_cast<size_t>(i)] = linearInterpolate(sampledRight[static_cast<size_t>(indexA)], sampledRight[static_cast<size_t>(indexB)], frac);
+        }
 
     }
     const auto meanLeft = sumLeft / static_cast<float>(kWaveTableSize);
@@ -2041,6 +2079,8 @@ bool PictureWaveSynthAudioProcessor::scannerParamsEqual(const ScannerParams& a, 
         && juce::approximatelyEqual(a.y, b.y)
         && juce::approximatelyEqual(a.length, b.length)
         && juce::approximatelyEqual(a.angleDegrees, b.angleDegrees)
+        && a.scanResolution == b.scanResolution
+        && a.useSplineInterpolation == b.useSplineInterpolation
         && juce::approximatelyEqual(a.ovalX1, b.ovalX1)
         && juce::approximatelyEqual(a.ovalY1, b.ovalY1)
         && juce::approximatelyEqual(a.ovalX2, b.ovalX2)

@@ -288,6 +288,7 @@ private:
     juce::Label titleLabel;
     juce::Label scannerTitleLabel;
     juce::Label mappingTitleLabel;
+    ResettableToggleButton scanSplineInterpolationButton{ "Spline" };
     juce::Label envTitleLabel;
 
     juce::Label scanXLabel;
@@ -402,6 +403,7 @@ private:
     std::unique_ptr<SliderAttachment> modeCtrl6Attachment;
     std::unique_ptr<ComboBoxAttachment> scannerModeAttachment;
     std::unique_ptr<ComboBoxAttachment> scanResolutionAttachment;
+    std::unique_ptr<ButtonAttachment> scanSplineInterpolationAttachment;
     std::unique_ptr<ButtonAttachment> randomPhaseAttachment;
     std::unique_ptr<ButtonAttachment> propTempoSyncAttachment;
 
