@@ -3,8 +3,14 @@
 #include <JuceHeader.h>
 #include <array>
 #include <atomic>
+#include <limits>
 #include <memory>
 #include <vector>
+
+namespace
+{
+constexpr int kInternalWaveTableSize = 2048;
+}
 
 class SineWaveSound final : public juce::SynthesiserSound
 {
@@ -38,7 +44,7 @@ public:
 
     void setAdsrSampleRate(double sampleRate);
     void updateAdsr(float attackMs, float decayMs, float sustainLevel, float releaseMs, EnvelopeMode mode);
-    void setWaveTables(const float* leftTable, const float* rightTable, int size);
+    void setWaveTables(const float* leftTable, const float* rightTable, int size, uint32_t generation);
     void setNoteDriftAmount(float amount);
     void setLiveNoteDriftRateHz(float rateHz);
     double getPropellorPhaseOffset() const;
@@ -47,9 +53,20 @@ public:
     void forceStop();
 
 private:
-    const float* waveTableLeft = nullptr;
-    const float* waveTableRight = nullptr;
     int waveTableSize = 0;
+    std::array<float, kInternalWaveTableSize> currentWaveTableLeft{};
+    std::array<float, kInternalWaveTableSize> currentWaveTableRight{};
+    std::array<float, kInternalWaveTableSize> targetWaveTableLeft{};
+    std::array<float, kInternalWaveTableSize> targetWaveTableRight{};
+    std::array<float, kInternalWaveTableSize> pendingWaveTableLeft{};
+    std::array<float, kInternalWaveTableSize> pendingWaveTableRight{};
+    int waveTableFadeSamples = 1;
+    int waveTableFadeSamplesRemaining = 0;
+    int pendingWaveTableSize = 0;
+    uint32_t appliedWaveTableGeneration = std::numeric_limits<uint32_t>::max();
+    uint32_t pendingWaveTableGeneration = std::numeric_limits<uint32_t>::max();
+    bool hasWaveTable = false;
+    bool hasPendingWaveTable = false;
 
     juce::ADSR adsr;
     juce::ADSR::Parameters adsrParams;
@@ -248,10 +265,12 @@ private:
     std::vector<SineWaveVoice*> voices;
     std::array<float, kWaveTableSize> waveTableLeft{};
     std::array<float, kWaveTableSize> waveTableRight{};
+    uint32_t waveTableGeneration = 0;
     WaveTable previewWaveTableLeft{};
     WaveTable previewWaveTableRight{};
     std::vector<std::array<float, kWaveTableSize>> perVoiceWaveTableLeft;
     std::vector<std::array<float, kWaveTableSize>> perVoiceWaveTableRight;
+    std::vector<uint32_t> perVoiceWaveTableGenerations;
     std::vector<std::array<float, kNumModTargets>> perVoiceSmoothedModulationSums;
     std::vector<ScannerParams> perVoiceLastScannerParams;
     std::vector<double> perVoiceLastPropellorPhase;

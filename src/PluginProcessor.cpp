@@ -1,6 +1,7 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -177,6 +178,9 @@ void SineWaveVoice::prepare(double sampleRate, int samplesPerBlock, int outputCh
 {
     juce::ignoreUnused(samplesPerBlock, outputChannels);
     currentSampleRate = sampleRate;
+    waveTableFadeSamples = juce::jmax(1, static_cast<int>(std::round(currentSampleRate * 0.020)));
+    waveTableFadeSamplesRemaining = 0;
+    hasPendingWaveTable = false;
 }
 
 bool SineWaveVoice::canPlaySound(juce::SynthesiserSound* sound)
@@ -256,7 +260,7 @@ void SineWaveVoice::stopNote(float, bool allowTailOff)
 
 void SineWaveVoice::renderNextBlock(juce::AudioBuffer<float>& outputBuffer, int startSample, int numSamples)
 {
-    if (!isVoiceActive() || waveTableLeft == nullptr || waveTableRight == nullptr || waveTableSize < 2)
+    if (!isVoiceActive() || !hasWaveTable || waveTableSize < 2)
     {
         return;
     }
@@ -295,8 +299,44 @@ void SineWaveVoice::renderNextBlock(juce::AudioBuffer<float>& outputBuffer, int 
         const auto indexB = (indexA + 1) % waveTableSize;
         const auto frac = static_cast<float>(tablePosition - static_cast<double>(indexA));
 
-        const auto leftSample = linearInterpolate(waveTableLeft[indexA], waveTableLeft[indexB], frac);
-        const auto rightSample = linearInterpolate(waveTableRight[indexA], waveTableRight[indexB], frac);
+        auto leftSample = linearInterpolate(currentWaveTableLeft[static_cast<size_t>(indexA)], currentWaveTableLeft[static_cast<size_t>(indexB)], frac);
+        auto rightSample = linearInterpolate(currentWaveTableRight[static_cast<size_t>(indexA)], currentWaveTableRight[static_cast<size_t>(indexB)], frac);
+
+        if (waveTableFadeSamplesRemaining > 0)
+        {
+            const auto fade = 1.0f - (static_cast<float>(waveTableFadeSamplesRemaining) / static_cast<float>(juce::jmax(1, waveTableFadeSamples)));
+            const auto targetLeft = linearInterpolate(targetWaveTableLeft[static_cast<size_t>(indexA)], targetWaveTableLeft[static_cast<size_t>(indexB)], frac);
+            const auto targetRight = linearInterpolate(targetWaveTableRight[static_cast<size_t>(indexA)], targetWaveTableRight[static_cast<size_t>(indexB)], frac);
+            leftSample = linearInterpolate(leftSample, targetLeft, fade);
+            rightSample = linearInterpolate(rightSample, targetRight, fade);
+
+            --waveTableFadeSamplesRemaining;
+            if (waveTableFadeSamplesRemaining == 0)
+            {
+                currentWaveTableLeft = targetWaveTableLeft;
+                currentWaveTableRight = targetWaveTableRight;
+
+                if (hasPendingWaveTable)
+                {
+                    targetWaveTableLeft = pendingWaveTableLeft;
+                    targetWaveTableRight = pendingWaveTableRight;
+                    appliedWaveTableGeneration = pendingWaveTableGeneration;
+                    if (pendingWaveTableSize != waveTableSize)
+                    {
+                        waveTableSize = pendingWaveTableSize;
+                        currentWaveTableLeft = targetWaveTableLeft;
+                        currentWaveTableRight = targetWaveTableRight;
+                        waveTableFadeSamplesRemaining = 0;
+                    }
+                    else
+                    {
+                        waveTableFadeSamplesRemaining = waveTableFadeSamples;
+                    }
+
+                    hasPendingWaveTable = false;
+                }
+            }
+        }
 
         const auto env = adsr.getNextSample() * envelopeOutputLevel;
         const auto leftValue = leftSample * env * level;
@@ -428,11 +468,52 @@ void SineWaveVoice::updateAdsr(float attackMs, float decayMs, float sustainLevel
     adsr.setParameters(adsrParams);
 }
 
-void SineWaveVoice::setWaveTables(const float* leftTable, const float* rightTable, int size)
+void SineWaveVoice::setWaveTables(const float* leftTable, const float* rightTable, int size, uint32_t generation)
 {
-    waveTableLeft = leftTable;
-    waveTableRight = rightTable;
-    waveTableSize = size;
+    if (leftTable == nullptr || rightTable == nullptr || size < 2)
+    {
+        return;
+    }
+
+    const auto clampedSize = juce::jlimit(2, kInternalWaveTableSize, size);
+    if (hasWaveTable && generation == appliedWaveTableGeneration && waveTableSize == clampedSize)
+    {
+        return;
+    }
+
+    if (hasWaveTable && waveTableFadeSamplesRemaining > 0)
+    {
+        if (hasPendingWaveTable && generation == pendingWaveTableGeneration && pendingWaveTableSize == clampedSize)
+        {
+            return;
+        }
+
+        std::copy_n(leftTable, static_cast<size_t>(clampedSize), pendingWaveTableLeft.begin());
+        std::copy_n(rightTable, static_cast<size_t>(clampedSize), pendingWaveTableRight.begin());
+        pendingWaveTableSize = clampedSize;
+        pendingWaveTableGeneration = generation;
+        hasPendingWaveTable = true;
+        return;
+    }
+
+    std::copy_n(leftTable, static_cast<size_t>(clampedSize), targetWaveTableLeft.begin());
+    std::copy_n(rightTable, static_cast<size_t>(clampedSize), targetWaveTableRight.begin());
+
+    if (!hasWaveTable || waveTableSize != clampedSize)
+    {
+        currentWaveTableLeft = targetWaveTableLeft;
+        currentWaveTableRight = targetWaveTableRight;
+        waveTableFadeSamplesRemaining = 0;
+        hasWaveTable = true;
+    }
+    else
+    {
+        waveTableFadeSamplesRemaining = waveTableFadeSamples;
+    }
+
+    waveTableSize = clampedSize;
+    appliedWaveTableGeneration = generation;
+    hasPendingWaveTable = false;
 }
 
 void SineWaveVoice::setNoteDriftAmount(float amount)
@@ -484,6 +565,7 @@ PictureWaveSynthAudioProcessor::PictureWaveSynthAudioProcessor()
 
     perVoiceWaveTableLeft.resize(static_cast<size_t>(kMaxVoices));
     perVoiceWaveTableRight.resize(static_cast<size_t>(kMaxVoices));
+    perVoiceWaveTableGenerations.resize(static_cast<size_t>(kMaxVoices), 0);
     perVoiceSmoothedModulationSums.resize(static_cast<size_t>(kMaxVoices));
     for (auto& sums : perVoiceSmoothedModulationSums)
     {
@@ -530,8 +612,10 @@ void PictureWaveSynthAudioProcessor::prepareToPlay(double sampleRate, int sample
     modulationModWheel = 0.0f;
     heldNoteCount = 0;
     modulationPreviewSeed = static_cast<uint32_t>(juce::Random::getSystemRandom().nextInt());
+    waveTableGeneration = 0;
     smoothedModulationSums.fill(0.0f);
     smoothedPreviewModulationSums.fill(0.0f);
+    std::fill(perVoiceWaveTableGenerations.begin(), perVoiceWaveTableGenerations.end(), 0u);
     for (auto& sums : perVoiceSmoothedModulationSums)
     {
         sums.fill(0.0f);
@@ -1195,6 +1279,7 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
                     perVoiceLastScannerParams[static_cast<size_t>(i)] = voiceScanner;
                     perVoiceLastPropellorPhase[static_cast<size_t>(i)] = phaseValue;
                     perVoiceHasCachedScannerState[static_cast<size_t>(i)] = true;
+                    ++perVoiceWaveTableGenerations[static_cast<size_t>(i)];
                 }
                 else if (scannerChanged || !perVoiceHasCachedScannerState[static_cast<size_t>(i)])
                 {
@@ -1202,13 +1287,20 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
                     perVoiceLastScannerParams[static_cast<size_t>(i)] = voiceScanner;
                     perVoiceLastPropellorPhase[static_cast<size_t>(i)] = phaseValue;
                     perVoiceHasCachedScannerState[static_cast<size_t>(i)] = true;
+                    ++perVoiceWaveTableGenerations[static_cast<size_t>(i)];
                 }
 
-                voice->setWaveTables(left.data(), right.data(), kWaveTableSize);
+                voice->setWaveTables(left.data(),
+                                     right.data(),
+                                     kWaveTableSize,
+                                     perVoiceWaveTableGenerations[static_cast<size_t>(i)]);
             }
             else
             {
-                voice->setWaveTables(waveTableLeft.data(), waveTableRight.data(), kWaveTableSize);
+                voice->setWaveTables(waveTableLeft.data(),
+                                     waveTableRight.data(),
+                                     kWaveTableSize,
+                                     waveTableGeneration);
             }
         }
     }
@@ -1837,6 +1929,7 @@ void PictureWaveSynthAudioProcessor::regenerateWaveTablesIfNeeded(const ScannerP
 
     lastScannerParams = scanner;
     hasLastScannerParams = true;
+    ++waveTableGeneration;
     waveTableDirty.store(false);
 }
 
