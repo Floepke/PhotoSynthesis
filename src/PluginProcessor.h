@@ -13,6 +13,13 @@ public:
     bool appliesToChannel(int) override { return true; }
 };
 
+enum class EnvelopeMode
+{
+    adsr = 0,
+    asr,
+    ar
+};
+
 class SineWaveVoice final : public juce::SynthesiserVoice
 {
 public:
@@ -30,7 +37,7 @@ public:
     void renderNextBlock(juce::AudioBuffer<float>&, int startSample, int numSamples) override;
 
     void setAdsrSampleRate(double sampleRate);
-    void updateAdsr(float attackMs, float decayMs, float sustainLevel, float releaseMs);
+    void updateAdsr(float attackMs, float decayMs, float sustainLevel, float releaseMs, EnvelopeMode mode);
     void setWaveTables(const float* leftTable, const float* rightTable, int size);
     void setNoteDriftAmount(float amount);
     void setLiveNoteDriftRateHz(float rateHz);
@@ -60,7 +67,11 @@ private:
     float propellorPhaseOffset = 0.0f;
     uint32_t randomModulationSeed = 0;
     float noteOnVelocity = 0.0f;
+    float envelopeOutputLevel = 1.0f;
+    int arReleaseSampleCountdown = 0;
+    EnvelopeMode envelopeMode = EnvelopeMode::adsr;
     bool randomPropellorPhaseEnabled = false;
+    bool arReleaseTriggered = false;
     bool retriggeringFromSteal = false;
 };
 
@@ -87,8 +98,27 @@ class PictureWaveSynthAudioProcessor final : public juce::AudioProcessor
 {
 public:
     using WaveTable = std::array<float, 2048>;
+    using IIRCoefficientsPtr = juce::dsp::IIR::Coefficients<float>::Ptr;
 
     using juce::AudioProcessor::processBlock;
+
+    struct FxFilterSettings
+    {
+        int type = 0;
+        float cutoffHz = 1000.0f;
+        float resonance = 0.707f;
+        float gainDecibels = 0.0f;
+    };
+
+    struct ReverbSettings
+    {
+        float roomSize = 0.35f;
+        float damping = 0.5f;
+        float width = 1.0f;
+        float wetLevel = 0.0f;
+        float dryLevel = 1.0f;
+        float freezeMode = 0.0f;
+    };
 
     PictureWaveSynthAudioProcessor();
     ~PictureWaveSynthAudioProcessor() override = default;
@@ -130,9 +160,16 @@ public:
     float getModulationAmountForParameter(const char* paramId) const;
     float getEffectiveParameterValue(const char* paramId) const;
     void copyCurrentWaveTablePreview(WaveTable& left, WaveTable& right) const;
+    FxFilterSettings getFxFilterSettings() const;
+    ReverbSettings getReverbSettings() const;
+    static juce::StringArray getFxFilterTypeNames();
+    static bool fxFilterTypeUsesGain(int type);
+    static IIRCoefficientsPtr createFxFilterCoefficients(const FxFilterSettings& settings, double sampleRate);
+    static IIRCoefficientsPtr createDcBlockerCoefficients(double sampleRate);
 
 private:
     static constexpr int kNumModTargets = 37;
+    using StereoIIRFilter = juce::dsp::ProcessorDuplicator<juce::dsp::IIR::Filter<float>, juce::dsp::IIR::Coefficients<float>>;
 
     struct LoadedImageData
     {
@@ -185,6 +222,9 @@ private:
     bool applyLoadedImage(const juce::Image& image, juce::String& errorMessage);
     void clearLoadedImage();
     void updateWaveTablePreview(const float* left, const float* right);
+    void updateDcBlocker();
+    void updateFxFilter();
+    void updateReverb();
 
     void regenerateWaveTablesIfNeeded(const ScannerParams& scanner);
     void regenerateWaveTablesFromImage(const LoadedImageData& imageData,
@@ -198,6 +238,9 @@ private:
     static bool scannerParamsEqual(const ScannerParams& a, const ScannerParams& b);
 
     RoundRobinSynthesiser synth;
+    StereoIIRFilter dcBlocker;
+    StereoIIRFilter fxFilter;
+    juce::Reverb reverb;
     mutable juce::SpinLock imageLock;
     mutable juce::SpinLock waveTablePreviewLock;
     std::shared_ptr<LoadedImageData> loadedImageData;

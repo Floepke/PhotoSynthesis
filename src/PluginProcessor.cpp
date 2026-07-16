@@ -147,6 +147,19 @@ int modTargetIndexForParamId(const char* paramId)
 
     return -1;
 }
+
+enum FxFilterType
+{
+    fxFilterOff = 0,
+    fxFilterLowPass,
+    fxFilterHighPass,
+    fxFilterBandPass,
+    fxFilterNotch,
+    fxFilterPeak,
+    fxFilterLowShelf,
+    fxFilterHighShelf,
+    fxFilterAllPass
+};
 }
 
 void SineWaveVoice::prepare(double sampleRate, int samplesPerBlock, int outputChannels)
@@ -206,6 +219,8 @@ void SineWaveVoice::startNote(int midiNoteNumber, float velocity, juce::Synthesi
     retriggeringFromSteal = false;
     randomModulationSeed = static_cast<uint32_t>(juce::Random::getSystemRandom().nextInt());
     propellorPhaseOffset = randomPropellorPhaseEnabled ? juce::Random::getSystemRandom().nextFloat() : 0.0f;
+    arReleaseTriggered = false;
+    arReleaseSampleCountdown = juce::jmax(1, arReleaseSampleCountdown);
     adsr.noteOn();
 }
 
@@ -272,7 +287,7 @@ void SineWaveVoice::renderNextBlock(juce::AudioBuffer<float>& outputBuffer, int 
         const auto leftSample = linearInterpolate(waveTableLeft[indexA], waveTableLeft[indexB], frac);
         const auto rightSample = linearInterpolate(waveTableRight[indexA], waveTableRight[indexB], frac);
 
-        const auto env = adsr.getNextSample();
+        const auto env = adsr.getNextSample() * envelopeOutputLevel;
         const auto leftValue = leftSample * env * level;
         const auto rightValue = rightSample * env * level;
 
@@ -292,6 +307,16 @@ void SineWaveVoice::renderNextBlock(juce::AudioBuffer<float>& outputBuffer, int 
         if (phase >= 1.0)
         {
             phase -= 1.0;
+        }
+
+        if (envelopeMode == EnvelopeMode::ar && !arReleaseTriggered)
+        {
+            --arReleaseSampleCountdown;
+            if (arReleaseSampleCountdown <= 0)
+            {
+                adsr.noteOff();
+                arReleaseTriggered = true;
+            }
         }
     }
 
@@ -376,12 +401,19 @@ void SineWaveVoice::setAdsrSampleRate(double sampleRate)
     adsr.setSampleRate(sampleRate);
 }
 
-void SineWaveVoice::updateAdsr(float attackMs, float decayMs, float sustainLevel, float releaseMs)
+void SineWaveVoice::updateAdsr(float attackMs, float decayMs, float sustainLevel, float releaseMs, EnvelopeMode mode)
 {
-    adsrParams.attack = attackMs / 1000.0f;
-    adsrParams.decay = decayMs / 1000.0f;
-    adsrParams.sustain = sustainLevel;
+    envelopeMode = mode;
+    const auto attackSeconds = attackMs / 1000.0f;
+    const auto arMode = mode == EnvelopeMode::ar;
+    const auto asrMode = mode == EnvelopeMode::asr;
+
+    adsrParams.attack = attackSeconds;
+    adsrParams.decay = (asrMode || arMode) ? 0.001f : decayMs / 1000.0f;
+    adsrParams.sustain = (asrMode || arMode) ? 1.0f : sustainLevel;
     adsrParams.release = releaseMs / 1000.0f;
+    envelopeOutputLevel = asrMode ? juce::jlimit(0.0f, 1.0f, sustainLevel) : 1.0f;
+    arReleaseSampleCountdown = juce::jmax(1, static_cast<int>(std::round(currentSampleRate * attackSeconds)));
     adsr.setParameters(adsrParams);
 }
 
@@ -502,10 +534,27 @@ void PictureWaveSynthAudioProcessor::prepareToPlay(double sampleRate, int sample
             voice->setAdsrSampleRate(sampleRate);
         }
     }
+
+    juce::dsp::ProcessSpec fxSpec;
+    fxSpec.sampleRate = sampleRate;
+    fxSpec.maximumBlockSize = static_cast<uint32_t>(juce::jmax(1, samplesPerBlock));
+    fxSpec.numChannels = static_cast<uint32_t>(juce::jmax(1, getTotalNumOutputChannels()));
+    dcBlocker.prepare(fxSpec);
+    dcBlocker.reset();
+    updateDcBlocker();
+    fxFilter.prepare(fxSpec);
+    fxFilter.reset();
+    updateFxFilter();
+    reverb.reset();
+    updateReverb();
 }
 
 void PictureWaveSynthAudioProcessor::releaseResources()
 {
+    dcBlocker.reset();
+    fxFilter.reset();
+    reverb.reset();
+
     for (auto& value : modulationDisplayValues)
     {
         value.store(0.0f);
@@ -775,6 +824,7 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
     const auto decay = readParam("decay", true);
     const auto sustain = readParam("sustain", true);
     const auto release = readParam("release", true);
+    const auto envelopeMode = static_cast<EnvelopeMode>(juce::jlimit(0, 2, static_cast<int>(std::lround(parameters.getRawParameterValue("envType")->load()))));
     const auto gainDb = readParam("gain", true);
     const auto noteDriftAmount = readParam("noteDrift", true);
     const auto liveNoteDriftHz = readParam("liveNoteDrift", true);
@@ -1069,7 +1119,11 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
             const auto voiceNoteDrift = hasPerVoiceVariableRoutes ? readVoiceParam("noteDrift") : noteDriftAmount;
             const auto voiceLiveNoteDrift = hasPerVoiceVariableRoutes ? readVoiceParam("liveNoteDrift") : liveNoteDriftHz;
 
-            voice->updateAdsr(voiceAttack, voiceDecay, voiceSustain, hasPerVoiceVariableRoutes ? readVoiceParam("release") : release);
+            voice->updateAdsr(voiceAttack,
+                              voiceDecay,
+                              voiceSustain,
+                              hasPerVoiceVariableRoutes ? readVoiceParam("release") : release,
+                              envelopeMode);
             voice->setNoteDriftAmount(voiceNoteDrift);
             voice->setLiveNoteDriftRateHz(voiceLiveNoteDrift);
             voice->setRandomPropellorPhaseEnabled(usePerVoicePropellorPhase);
@@ -1148,6 +1202,32 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
     }
 
     synth.renderNextBlock(buffer, midiMessages, 0, buffer.getNumSamples());
+
+    updateFxFilter();
+    const auto fxSettings = getFxFilterSettings();
+    if (fxSettings.type != fxFilterOff)
+    {
+        juce::dsp::AudioBlock<float> audioBlock(buffer);
+        juce::dsp::ProcessContextReplacing<float> context(audioBlock);
+        fxFilter.process(context);
+    }
+
+    updateReverb();
+    if (buffer.getNumChannels() > 1)
+    {
+        reverb.processStereo(buffer.getWritePointer(0), buffer.getWritePointer(1), buffer.getNumSamples());
+    }
+    else if (buffer.getNumChannels() > 0)
+    {
+        reverb.processMono(buffer.getWritePointer(0), buffer.getNumSamples());
+    }
+
+    updateDcBlocker();
+    {
+        juce::dsp::AudioBlock<float> audioBlock(buffer);
+        juce::dsp::ProcessContextReplacing<float> context(audioBlock);
+        dcBlocker.process(context);
+    }
 
     if (scanner.mode == 4 && getSampleRate() > 0.0)
     {
@@ -1323,6 +1403,28 @@ PictureWaveSynthAudioProcessor::ParameterLayout PictureWaveSynthAudioProcessor::
         "release", "Release", juce::NormalisableRange<float>(1.0f, 5000.0f, 1.0f), 300.0f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         "gain", "Gain", juce::NormalisableRange<float>(-36.0f, 32.0f, 0.1f), -12.0f));
+    params.push_back(std::make_unique<juce::AudioParameterChoice>(
+        "envType", "Envelope Type", juce::StringArray{ "ADSR", "ASR", "AR" }, 0));
+    params.push_back(std::make_unique<juce::AudioParameterChoice>(
+        "fxFilterType", "FX Filter Type", getFxFilterTypeNames(), 0));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        "fxFilterCutoff", "FX Filter Cutoff", juce::NormalisableRange<float>(20.0f, 20000.0f, 0.0f, 0.25f), 1200.0f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        "fxFilterResonance", "FX Filter Resonance", juce::NormalisableRange<float>(0.1f, 10.0f, 0.001f, 0.35f), 0.707f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        "fxFilterGain", "FX Filter Gain", juce::NormalisableRange<float>(-24.0f, 24.0f, 0.1f), 0.0f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        "reverbRoomSize", "Reverb Room Size", juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.35f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        "reverbDamping", "Reverb Damping", juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.5f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        "reverbWidth", "Reverb Width", juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 1.0f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        "reverbWet", "Reverb Wet", juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.0f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        "reverbDry", "Reverb Dry", juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 1.0f));
+    params.push_back(std::make_unique<juce::AudioParameterBool>(
+        "reverbFreeze", "Reverb Freeze", false));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         "noteDrift", "Note Drift", juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.1f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
@@ -1567,6 +1669,78 @@ float PictureWaveSynthAudioProcessor::getEffectiveParameterValue(const char* par
     return effectiveDisplayValues[static_cast<size_t>(index)].load();
 }
 
+PictureWaveSynthAudioProcessor::FxFilterSettings PictureWaveSynthAudioProcessor::getFxFilterSettings() const
+{
+    FxFilterSettings settings;
+    settings.type = static_cast<int>(std::lround(parameters.getRawParameterValue("fxFilterType")->load()));
+    settings.cutoffHz = parameters.getRawParameterValue("fxFilterCutoff")->load();
+    settings.resonance = parameters.getRawParameterValue("fxFilterResonance")->load();
+    settings.gainDecibels = parameters.getRawParameterValue("fxFilterGain")->load();
+    return settings;
+}
+
+PictureWaveSynthAudioProcessor::ReverbSettings PictureWaveSynthAudioProcessor::getReverbSettings() const
+{
+    ReverbSettings settings;
+    settings.roomSize = parameters.getRawParameterValue("reverbRoomSize")->load();
+    settings.damping = parameters.getRawParameterValue("reverbDamping")->load();
+    settings.width = parameters.getRawParameterValue("reverbWidth")->load();
+    settings.wetLevel = parameters.getRawParameterValue("reverbWet")->load();
+    settings.dryLevel = parameters.getRawParameterValue("reverbDry")->load();
+    settings.freezeMode = parameters.getRawParameterValue("reverbFreeze")->load();
+    return settings;
+}
+
+juce::StringArray PictureWaveSynthAudioProcessor::getFxFilterTypeNames()
+{
+    return {
+        "Off",
+        "Low-pass",
+        "High-pass",
+        "Band-pass",
+        "Notch",
+        "Peak",
+        "Low Shelf",
+        "High Shelf",
+        "All-pass"
+    };
+}
+
+bool PictureWaveSynthAudioProcessor::fxFilterTypeUsesGain(int type)
+{
+    return type == fxFilterPeak || type == fxFilterLowShelf || type == fxFilterHighShelf;
+}
+
+PictureWaveSynthAudioProcessor::IIRCoefficientsPtr PictureWaveSynthAudioProcessor::createDcBlockerCoefficients(double sampleRate)
+{
+    const auto safeSampleRate = juce::jmax(1.0, sampleRate);
+    return juce::dsp::IIR::Coefficients<float>::makeHighPass(safeSampleRate, 15.0, 0.70710678118);
+}
+
+PictureWaveSynthAudioProcessor::IIRCoefficientsPtr PictureWaveSynthAudioProcessor::createFxFilterCoefficients(const FxFilterSettings& settings,
+                                                                                                              double sampleRate)
+{
+    const auto safeSampleRate = juce::jmax(1.0, sampleRate);
+    const auto cutoff = static_cast<double>(juce::jlimit(20.0f, 20000.0f, settings.cutoffHz));
+    const auto q = static_cast<double>(juce::jlimit(0.1f, 10.0f, settings.resonance));
+    const auto gain = static_cast<double>(juce::Decibels::decibelsToGain(settings.gainDecibels));
+
+    switch (settings.type)
+    {
+        case fxFilterLowPass: return juce::dsp::IIR::Coefficients<float>::makeLowPass(safeSampleRate, cutoff, q);
+        case fxFilterHighPass: return juce::dsp::IIR::Coefficients<float>::makeHighPass(safeSampleRate, cutoff, q);
+        case fxFilterBandPass: return juce::dsp::IIR::Coefficients<float>::makeBandPass(safeSampleRate, cutoff, q);
+        case fxFilterNotch: return juce::dsp::IIR::Coefficients<float>::makeNotch(safeSampleRate, cutoff, q);
+        case fxFilterPeak: return juce::dsp::IIR::Coefficients<float>::makePeakFilter(safeSampleRate, cutoff, q, gain);
+        case fxFilterLowShelf: return juce::dsp::IIR::Coefficients<float>::makeLowShelf(safeSampleRate, cutoff, q, gain);
+        case fxFilterHighShelf: return juce::dsp::IIR::Coefficients<float>::makeHighShelf(safeSampleRate, cutoff, q, gain);
+        case fxFilterAllPass: return juce::dsp::IIR::Coefficients<float>::makeAllPass(safeSampleRate, cutoff, q);
+        case fxFilterOff:
+        default:
+            return {};
+    }
+}
+
 void PictureWaveSynthAudioProcessor::copyCurrentWaveTablePreview(WaveTable& left, WaveTable& right) const
 {
     const juce::SpinLock::ScopedLockType lock(waveTablePreviewLock);
@@ -1585,6 +1759,37 @@ void PictureWaveSynthAudioProcessor::updateWaveTablePreview(const float* left, c
     const juce::SpinLock::ScopedLockType lock(waveTablePreviewLock);
     std::copy(left, left + kWaveTableSize, previewWaveTableLeft.begin());
     std::copy(right, right + kWaveTableSize, previewWaveTableRight.begin());
+}
+
+void PictureWaveSynthAudioProcessor::updateDcBlocker()
+{
+    const auto coefficients = createDcBlockerCoefficients(getSampleRate() > 0.0 ? getSampleRate() : 44100.0);
+    if (coefficients != nullptr)
+    {
+        *dcBlocker.state = *coefficients;
+    }
+}
+
+void PictureWaveSynthAudioProcessor::updateFxFilter()
+{
+    const auto coefficients = createFxFilterCoefficients(getFxFilterSettings(), getSampleRate() > 0.0 ? getSampleRate() : 44100.0);
+    if (coefficients != nullptr)
+    {
+        *fxFilter.state = *coefficients;
+    }
+}
+
+void PictureWaveSynthAudioProcessor::updateReverb()
+{
+    const auto settings = getReverbSettings();
+    juce::Reverb::Parameters params;
+    params.roomSize = settings.roomSize;
+    params.damping = settings.damping;
+    params.width = settings.width;
+    params.wetLevel = settings.wetLevel;
+    params.dryLevel = settings.dryLevel;
+    params.freezeMode = settings.freezeMode;
+    reverb.setParameters(params);
 }
 
 void PictureWaveSynthAudioProcessor::regenerateWaveTablesIfNeeded(const ScannerParams& scanner)

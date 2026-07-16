@@ -161,6 +161,17 @@ private:
         juce::Colour accent;
     };
 
+    class FilterResponseViewer final : public juce::Component
+    {
+    public:
+        void setFilterState(PictureWaveSynthAudioProcessor::FxFilterSettings newSettings, double newSampleRate);
+        void paint(juce::Graphics& g) override;
+
+    private:
+        PictureWaveSynthAudioProcessor::FxFilterSettings settings;
+        double sampleRate = 44100.0;
+    };
+
     class ResettableComboBox final : public juce::ComboBox
     {
     public:
@@ -254,6 +265,8 @@ private:
     ModulationSlider gainSlider;
     ModulationSlider noteDriftSlider;
     ModulationSlider liveNoteDriftSlider;
+    juce::Label envTypeLabel;
+    ResettableComboBox envTypeCombo;
 
     juce::Label attackLabel;
     juce::Label decayLabel;
@@ -300,7 +313,29 @@ private:
     juce::TabbedComponent scannerTabs{ juce::TabbedButtonBar::TabsAtTop };
     juce::Component photoScannerTabPage;
     juce::Component fxTabPage;
-    juce::Label fxPlaceholderLabel;
+    juce::Component reverbTabPage;
+    juce::GroupComponent fxFilterGroup;
+    juce::Label fxFilterTypeLabel;
+    ResettableComboBox fxFilterTypeCombo;
+    ModulationSlider fxFilterCutoffSlider;
+    ModulationSlider fxFilterResonanceSlider;
+    ModulationSlider fxFilterGainSlider;
+    juce::Label fxFilterCutoffLabel;
+    juce::Label fxFilterResonanceLabel;
+    juce::Label fxFilterGainLabel;
+    FilterResponseViewer fxFilterViewer;
+    juce::GroupComponent reverbGroup;
+    ModulationSlider reverbRoomSizeSlider;
+    ModulationSlider reverbDampingSlider;
+    ModulationSlider reverbWidthSlider;
+    ModulationSlider reverbWetSlider;
+    ModulationSlider reverbDrySlider;
+    ResettableToggleButton reverbFreezeButton{ "Freeze" };
+    juce::Label reverbRoomSizeLabel;
+    juce::Label reverbDampingLabel;
+    juce::Label reverbWidthLabel;
+    juce::Label reverbWetLabel;
+    juce::Label reverbDryLabel;
 
     juce::Label uiZoomLabel;
     ResettableComboBox uiZoomCombo;
@@ -351,6 +386,7 @@ private:
     std::unique_ptr<SliderAttachment> gainAttachment;
     std::unique_ptr<SliderAttachment> noteDriftAttachment;
     std::unique_ptr<SliderAttachment> liveNoteDriftAttachment;
+    std::unique_ptr<ComboBoxAttachment> envTypeAttachment;
 
     std::unique_ptr<SliderAttachment> scanXAttachment;
     std::unique_ptr<SliderAttachment> scanYAttachment;
@@ -375,6 +411,16 @@ private:
     std::unique_ptr<SliderAttachment> mapGRAttachment;
     std::unique_ptr<SliderAttachment> mapBRAttachment;
     std::unique_ptr<SliderAttachment> mapARAttachment;
+    std::unique_ptr<ComboBoxAttachment> fxFilterTypeAttachment;
+    std::unique_ptr<SliderAttachment> fxFilterCutoffAttachment;
+    std::unique_ptr<SliderAttachment> fxFilterResonanceAttachment;
+    std::unique_ptr<SliderAttachment> fxFilterGainAttachment;
+    std::unique_ptr<SliderAttachment> reverbRoomSizeAttachment;
+    std::unique_ptr<SliderAttachment> reverbDampingAttachment;
+    std::unique_ptr<SliderAttachment> reverbWidthAttachment;
+    std::unique_ptr<SliderAttachment> reverbWetAttachment;
+    std::unique_ptr<SliderAttachment> reverbDryAttachment;
+    std::unique_ptr<ButtonAttachment> reverbFreezeAttachment;
 
     std::unique_ptr<SliderAttachment> activeLfoRateAttachment;
     std::unique_ptr<SliderAttachment> activeLfoDepthAttachment;
@@ -419,6 +465,9 @@ private:
     void applyGlobalWidgetScale();
     void refreshModulationVisuals();
     void refreshWaveformViewers();
+    void refreshFxFilterViewer();
+    void updateFxFilterControlState();
+    void updateEnvelopeControlState();
     void updateModeControlLabelsAndVisibility();
     bool restoreEditorGeometryFromState();
     void storeEditorGeometryToState();

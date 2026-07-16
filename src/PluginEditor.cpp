@@ -332,6 +332,63 @@ void PictureWaveSynthAudioProcessorEditor::ScannerWaveformViewer::paint(juce::Gr
     g.drawRoundedRectangle(getLocalBounds().toFloat().reduced(0.5f), 6.0f, 1.0f);
 }
 
+void PictureWaveSynthAudioProcessorEditor::FilterResponseViewer::setFilterState(PictureWaveSynthAudioProcessor::FxFilterSettings newSettings,
+                                                                                double newSampleRate)
+{
+    settings = newSettings;
+    sampleRate = juce::jmax(1.0, newSampleRate);
+    repaint();
+}
+
+void PictureWaveSynthAudioProcessorEditor::FilterResponseViewer::paint(juce::Graphics& g)
+{
+    auto area = getLocalBounds().toFloat();
+    g.setColour(juce::Colour::fromRGB(20, 24, 31));
+    g.fillRoundedRectangle(area, 8.0f);
+
+    area.reduce(10.0f, 10.0f);
+    if (area.getWidth() <= 4.0f || area.getHeight() <= 4.0f)
+    {
+        return;
+    }
+
+    const auto coefficients = PictureWaveSynthAudioProcessor::createFxFilterCoefficients(settings, sampleRate);
+    juce::Path response;
+    constexpr double minFrequency = 20.0;
+    constexpr double maxFrequency = 20000.0;
+    constexpr float minDb = -24.0f;
+    constexpr float maxDb = 24.0f;
+
+    for (int x = 0; x < static_cast<int>(area.getWidth()); ++x)
+    {
+        const auto normX = area.getWidth() > 1.0f ? static_cast<float>(x) / (area.getWidth() - 1.0f) : 0.0f;
+        const auto frequency = minFrequency * std::pow(maxFrequency / minFrequency, static_cast<double>(normX));
+        float magnitudeDb = 0.0f;
+        if (coefficients != nullptr)
+        {
+            const auto magnitude = coefficients->getMagnitudeForFrequency(frequency, sampleRate);
+            magnitudeDb = juce::Decibels::gainToDecibels(static_cast<float>(magnitude), minDb);
+        }
+
+        const auto clampedDb = juce::jlimit(minDb, maxDb, magnitudeDb);
+        const auto y = juce::jmap(clampedDb, maxDb, minDb, area.getY(), area.getBottom());
+        const auto drawX = area.getX() + static_cast<float>(x);
+        if (x == 0)
+        {
+            response.startNewSubPath(drawX, y);
+        }
+        else
+        {
+            response.lineTo(drawX, y);
+        }
+    }
+
+    g.setColour(juce::Colours::white.withAlpha(0.12f));
+    g.drawRoundedRectangle(getLocalBounds().toFloat().reduced(0.5f), 8.0f, 1.0f);
+    g.setColour(juce::Colour::fromRGB(238, 197, 116));
+    g.strokePath(response, juce::PathStrokeType(2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+}
+
 void PictureWaveSynthAudioProcessorEditor::LfoVisualizer::paint(juce::Graphics& g)
 {
     auto area = getLocalBounds().toFloat().reduced(2.0f);
@@ -974,13 +1031,75 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
 
     addAndMakeVisible(scannerTabs);
     scannerTabs.addTab("Photo Scanner", juce::Colour::fromRGB(44, 50, 62), &photoScannerTabPage, false);
-    scannerTabs.addTab("FX", juce::Colour::fromRGB(44, 50, 62), &fxTabPage, false);
+    scannerTabs.addTab("Filter", juce::Colour::fromRGB(44, 50, 62), &fxTabPage, false);
+    scannerTabs.addTab("Reverb", juce::Colour::fromRGB(44, 50, 62), &reverbTabPage, false);
     scannerTabs.setCurrentTabIndex(0);
 
-    fxPlaceholderLabel.setText("FX page (coming soon)", juce::dontSendNotification);
-    fxPlaceholderLabel.setJustificationType(juce::Justification::centred);
-    fxPlaceholderLabel.setColour(juce::Label::textColourId, juce::Colour::fromRGB(203, 210, 222));
-    fxTabPage.addAndMakeVisible(fxPlaceholderLabel);
+    fxFilterGroup.setText("Stereo Filter");
+    fxFilterGroup.setColour(juce::GroupComponent::outlineColourId, juce::Colour::fromRGB(65, 73, 88));
+    fxFilterGroup.setColour(juce::GroupComponent::textColourId, juce::Colour::fromRGB(231, 235, 242));
+    fxTabPage.addAndMakeVisible(fxFilterGroup);
+
+    fxFilterTypeLabel.setText("Type", juce::dontSendNotification);
+    fxFilterTypeLabel.setJustificationType(juce::Justification::centredLeft);
+    fxFilterTypeLabel.setColour(juce::Label::textColourId, juce::Colour::fromRGB(214, 219, 230));
+    fxTabPage.addAndMakeVisible(fxFilterTypeLabel);
+
+    const auto filterTypeNames = PictureWaveSynthAudioProcessor::getFxFilterTypeNames();
+    for (int i = 0; i < filterTypeNames.size(); ++i)
+    {
+        fxFilterTypeCombo.addItem(filterTypeNames[i], i + 1);
+    }
+    fxFilterTypeCombo.onChange = [this]
+    {
+        updateFxFilterControlState();
+        refreshFxFilterViewer();
+    };
+    fxTabPage.addAndMakeVisible(fxFilterTypeCombo);
+
+    const auto setupFxKnob = [this](ModulationSlider& slider, juce::Label& label, const juce::String& text)
+    {
+        slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+        slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 80, 20);
+        slider.setName(text);
+        fxTabPage.addAndMakeVisible(slider);
+
+        label.setText(text, juce::dontSendNotification);
+        label.setJustificationType(juce::Justification::centred);
+        label.setColour(juce::Label::textColourId, juce::Colour::fromRGB(214, 219, 230));
+        fxTabPage.addAndMakeVisible(label);
+    };
+
+    setupFxKnob(fxFilterCutoffSlider, fxFilterCutoffLabel, "Cutoff");
+    setupFxKnob(fxFilterResonanceSlider, fxFilterResonanceLabel, "Resonance");
+    setupFxKnob(fxFilterGainSlider, fxFilterGainLabel, "Gain");
+    fxTabPage.addAndMakeVisible(fxFilterViewer);
+
+    reverbGroup.setText("Stereo Reverb");
+    reverbGroup.setColour(juce::GroupComponent::outlineColourId, juce::Colour::fromRGB(65, 73, 88));
+    reverbGroup.setColour(juce::GroupComponent::textColourId, juce::Colour::fromRGB(231, 235, 242));
+    reverbTabPage.addAndMakeVisible(reverbGroup);
+
+    const auto setupReverbKnob = [this](ModulationSlider& slider, juce::Label& label, const juce::String& text)
+    {
+        slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+        slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 80, 20);
+        slider.setName(text);
+        reverbTabPage.addAndMakeVisible(slider);
+
+        label.setText(text, juce::dontSendNotification);
+        label.setJustificationType(juce::Justification::centred);
+        label.setColour(juce::Label::textColourId, juce::Colour::fromRGB(214, 219, 230));
+        reverbTabPage.addAndMakeVisible(label);
+    };
+
+    setupReverbKnob(reverbRoomSizeSlider, reverbRoomSizeLabel, "Room Size");
+    setupReverbKnob(reverbDampingSlider, reverbDampingLabel, "Damping");
+    setupReverbKnob(reverbWidthSlider, reverbWidthLabel, "Width");
+    setupReverbKnob(reverbWetSlider, reverbWetLabel, "Wet");
+    setupReverbKnob(reverbDrySlider, reverbDryLabel, "Dry");
+    reverbFreezeButton.setColour(juce::ToggleButton::textColourId, juce::Colour::fromRGB(214, 219, 230));
+    reverbTabPage.addAndMakeVisible(reverbFreezeButton);
 
     loadImageButton.onClick = [this] { openImageChooser(); };
     initButton.onClick = [this]
@@ -989,8 +1108,10 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
         rebuildModeAttachments();
         rebuildActiveLfoAttachments();
         updateModeControlLabelsAndVisibility();
+        updateFxFilterControlState();
         configureModeSpecificResetBehaviour();
         refreshImagePreview();
+        refreshFxFilterViewer();
         imageStatusLabel.setText("Initial preset loaded", juce::dontSendNotification);
     };
     loadPresetButton.onClick = [this] { loadPresetFromFile(); };
@@ -1092,6 +1213,20 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
     setupSmallLabel(noteDriftLabel, "Note Drift");
     setupSmallLabel(liveNoteDriftLabel, "Drift Freq");
 
+    envTypeLabel.setText("Env", juce::dontSendNotification);
+    envTypeLabel.setJustificationType(juce::Justification::centredRight);
+    envTypeLabel.setColour(juce::Label::textColourId, juce::Colour::fromRGB(214, 219, 230));
+    addAndMakeVisible(envTypeLabel);
+    envTypeCombo.addItem("ADSR", 1);
+    envTypeCombo.addItem("ASR", 2);
+    envTypeCombo.addItem("AR", 3);
+    envTypeCombo.onChange = [this]
+    {
+        updateEnvelopeControlState();
+        resized();
+    };
+    addAndMakeVisible(envTypeCombo);
+
     setupMappingSlider(mapRLSlider, mapRLLabel, "R -> L");
     setupMappingSlider(mapGLSlider, mapGLLabel, "G -> L");
     setupMappingSlider(mapBLSlider, mapBLLabel, "B -> L");
@@ -1127,6 +1262,8 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
         audioProcessor.parameters, "sustain", sustainSlider);
     releaseAttachment = std::make_unique<SliderAttachment>(
         audioProcessor.parameters, "release", releaseSlider);
+    envTypeAttachment = std::make_unique<ComboBoxAttachment>(
+        audioProcessor.parameters, "envType", envTypeCombo);
     gainAttachment = std::make_unique<SliderAttachment>(
         audioProcessor.parameters, "gain", gainSlider);
     noteDriftAttachment = std::make_unique<SliderAttachment>(
@@ -1179,6 +1316,26 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
         audioProcessor.parameters, "mapBR", mapBRSlider);
     mapARAttachment = std::make_unique<SliderAttachment>(
         audioProcessor.parameters, "mapAR", mapARSlider);
+    fxFilterTypeAttachment = std::make_unique<ComboBoxAttachment>(
+        audioProcessor.parameters, "fxFilterType", fxFilterTypeCombo);
+    fxFilterCutoffAttachment = std::make_unique<SliderAttachment>(
+        audioProcessor.parameters, "fxFilterCutoff", fxFilterCutoffSlider);
+    fxFilterResonanceAttachment = std::make_unique<SliderAttachment>(
+        audioProcessor.parameters, "fxFilterResonance", fxFilterResonanceSlider);
+    fxFilterGainAttachment = std::make_unique<SliderAttachment>(
+        audioProcessor.parameters, "fxFilterGain", fxFilterGainSlider);
+    reverbRoomSizeAttachment = std::make_unique<SliderAttachment>(
+        audioProcessor.parameters, "reverbRoomSize", reverbRoomSizeSlider);
+    reverbDampingAttachment = std::make_unique<SliderAttachment>(
+        audioProcessor.parameters, "reverbDamping", reverbDampingSlider);
+    reverbWidthAttachment = std::make_unique<SliderAttachment>(
+        audioProcessor.parameters, "reverbWidth", reverbWidthSlider);
+    reverbWetAttachment = std::make_unique<SliderAttachment>(
+        audioProcessor.parameters, "reverbWet", reverbWetSlider);
+    reverbDryAttachment = std::make_unique<SliderAttachment>(
+        audioProcessor.parameters, "reverbDry", reverbDrySlider);
+    reverbFreezeAttachment = std::make_unique<ButtonAttachment>(
+        audioProcessor.parameters, "reverbFreeze", reverbFreezeButton);
 
     setupSectionLabel(modulationTitleLabel, "Modulation");
 
@@ -1418,9 +1575,12 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
     rebuildActiveLfoAttachments();
     rebuildModeAttachments();
     updateModeControlLabelsAndVisibility();
+    updateEnvelopeControlState();
+    updateFxFilterControlState();
     configureResetBehaviour();
 
     refreshImagePreview();
+    refreshFxFilterViewer();
     startTimerHz(24);
     updateResizeLimitsForDisplay();
     setResizable(false, false);
@@ -1590,16 +1750,27 @@ void PictureWaveSynthAudioProcessorEditor::configureResetBehaviour()
     configureSliderReset(mapGRSlider, "mapGR");
     configureSliderReset(mapBRSlider, "mapBR");
     configureSliderReset(mapARSlider, "mapAR");
+    configureSliderReset(fxFilterCutoffSlider, "fxFilterCutoff");
+    configureSliderReset(fxFilterResonanceSlider, "fxFilterResonance");
+    configureSliderReset(fxFilterGainSlider, "fxFilterGain");
+    configureSliderReset(reverbRoomSizeSlider, "reverbRoomSize");
+    configureSliderReset(reverbDampingSlider, "reverbDamping");
+    configureSliderReset(reverbWidthSlider, "reverbWidth");
+    configureSliderReset(reverbWetSlider, "reverbWet");
+    configureSliderReset(reverbDrySlider, "reverbDry");
     configureSliderReset(modResponseSlider, "modResponseMs");
 
     configureComboReset(scannerModeCombo, "scannerMode");
     configureComboReset(scanResolutionCombo, "scanResolution");
     configureComboReset(polyphonyCombo, "maxVoices");
+    configureComboReset(envTypeCombo, "envType");
     configureComboReset(lfoWaveCombo, "lfo1Wave");
+    configureComboReset(fxFilterTypeCombo, "fxFilterType");
     configureToggleReset(randomPhaseButton, "randomPhase");
     configureToggleReset(propTempoSyncButton, "propTempoSync");
     configureToggleReset(lfoSyncButton, "lfo1Sync");
     configureToggleReset(lfoRandomPhasePerVoiceButton, "lfo1RandomPhasePerVoice");
+    configureToggleReset(reverbFreezeButton, "reverbFreeze");
 
     for (int i = 0; i < kNumModRows; ++i)
     {
@@ -1744,7 +1915,10 @@ void PictureWaveSynthAudioProcessorEditor::loadPresetFromFile()
         rebuildModeAttachments();
         rebuildActiveLfoAttachments();
         updateModeControlLabelsAndVisibility();
+        updateEnvelopeControlState();
         refreshImagePreview();
+        updateFxFilterControlState();
+        refreshFxFilterViewer();
         imageStatusLabel.setText("Preset loaded: " + selected.getFileName(), juce::dontSendNotification);
     });
 }
@@ -1932,7 +2106,59 @@ void PictureWaveSynthAudioProcessorEditor::resized()
     shapeCtrl5Label.setBounds(scannerStartX + 1 * (scannerKnobSize + scannerKnobGap), shapeBaseTop + scannerRowStep + scannerLabelOffset, scannerKnobSize, 18);
     shapeCtrl6Label.setBounds(scannerStartX + 2 * (scannerKnobSize + scannerKnobGap), shapeBaseTop + scannerRowStep + scannerLabelOffset, scannerKnobSize, 18);
 
-    fxPlaceholderLabel.setBounds(20, 18, juce::jmax(220, fxTabPage.getWidth() - 40), juce::jmax(100, fxTabPage.getHeight() - 36));
+    const int fxPad = 18;
+    const int fxPageW = fxTabPage.getWidth();
+    const int fxPageH = fxTabPage.getHeight();
+    fxFilterGroup.setBounds(fxPad, 16, juce::jmax(320, fxPageW - 2 * fxPad), juce::jmax(220, fxPageH - 32));
+    fxFilterTypeLabel.setBounds(fxPad + 16, 32, 54, 22);
+    fxFilterTypeCombo.setBounds(fxPad + 72, 30, juce::jmin(180, juce::jmax(140, fxPageW - 2 * fxPad - 88)), 26);
+
+    const int fxViewerX = fxPad + 16;
+    const int fxViewerY = 68;
+    const int fxViewerW = juce::jmax(280, fxPageW - 2 * fxPad - 32);
+    const int fxViewerH = juce::jlimit(92, 140, juce::jmax(92, fxPageH / 3));
+    fxFilterViewer.setBounds(fxViewerX, fxViewerY, fxViewerW, fxViewerH);
+
+    const int fxKnobTop = fxViewerY + fxViewerH + 18;
+    const int fxKnobSize = juce::jlimit(76, 94, (fxViewerW - 24) / 3);
+    const int fxKnobGap = juce::jmax(12, (fxViewerW - 3 * fxKnobSize) / 2);
+    fxFilterCutoffSlider.setBounds(fxViewerX, fxKnobTop, fxKnobSize, fxKnobSize);
+    fxFilterResonanceSlider.setBounds(fxViewerX + fxKnobSize + fxKnobGap, fxKnobTop, fxKnobSize, fxKnobSize);
+    fxFilterGainSlider.setBounds(fxViewerX + 2 * (fxKnobSize + fxKnobGap), fxKnobTop, fxKnobSize, fxKnobSize);
+    fxFilterCutoffLabel.setBounds(fxViewerX, fxKnobTop + fxKnobSize + 2, fxKnobSize, 18);
+    fxFilterResonanceLabel.setBounds(fxViewerX + fxKnobSize + fxKnobGap, fxKnobTop + fxKnobSize + 2, fxKnobSize, 18);
+    fxFilterGainLabel.setBounds(fxViewerX + 2 * (fxKnobSize + fxKnobGap), fxKnobTop + fxKnobSize + 2, fxKnobSize, 18);
+
+    const int reverbPad = 18;
+    const int reverbPageW = reverbTabPage.getWidth();
+    const int reverbPageH = reverbTabPage.getHeight();
+    reverbGroup.setBounds(reverbPad, 16, juce::jmax(320, reverbPageW - 2 * reverbPad), juce::jmax(220, reverbPageH - 32));
+
+    const int reverbKnobAreaX = reverbPad + 16;
+    const int reverbKnobAreaY = 40;
+    const int reverbKnobAreaW = juce::jmax(280, reverbPageW - 2 * reverbPad - 32);
+    const int reverbKnobAreaH = juce::jmax(180, reverbPageH - 92);
+    const int reverbKnobGap = 16;
+    const int reverbCols = 3;
+    const int reverbRows = 2;
+    const int reverbKnobSize = juce::jlimit(72, 92,
+                                            juce::jmin((reverbKnobAreaW - reverbKnobGap * (reverbCols - 1)) / reverbCols,
+                                                       (reverbKnobAreaH - 28 - reverbKnobGap * (reverbRows - 1)) / reverbRows - 18));
+    const int reverbCellW = reverbKnobSize + reverbKnobGap;
+    const int reverbCellH = reverbKnobSize + 34;
+
+    reverbRoomSizeSlider.setBounds(reverbKnobAreaX + 0 * reverbCellW, reverbKnobAreaY + 0 * reverbCellH, reverbKnobSize, reverbKnobSize);
+    reverbDampingSlider.setBounds(reverbKnobAreaX + 1 * reverbCellW, reverbKnobAreaY + 0 * reverbCellH, reverbKnobSize, reverbKnobSize);
+    reverbWidthSlider.setBounds(reverbKnobAreaX + 2 * reverbCellW, reverbKnobAreaY + 0 * reverbCellH, reverbKnobSize, reverbKnobSize);
+    reverbWetSlider.setBounds(reverbKnobAreaX + 0 * reverbCellW, reverbKnobAreaY + 1 * reverbCellH, reverbKnobSize, reverbKnobSize);
+    reverbDrySlider.setBounds(reverbKnobAreaX + 1 * reverbCellW, reverbKnobAreaY + 1 * reverbCellH, reverbKnobSize, reverbKnobSize);
+
+    reverbRoomSizeLabel.setBounds(reverbKnobAreaX + 0 * reverbCellW, reverbKnobAreaY + reverbKnobSize + 2, reverbKnobSize, 18);
+    reverbDampingLabel.setBounds(reverbKnobAreaX + 1 * reverbCellW, reverbKnobAreaY + reverbKnobSize + 2, reverbKnobSize, 18);
+    reverbWidthLabel.setBounds(reverbKnobAreaX + 2 * reverbCellW, reverbKnobAreaY + reverbKnobSize + 2, reverbKnobSize, 18);
+    reverbWetLabel.setBounds(reverbKnobAreaX + 0 * reverbCellW, reverbKnobAreaY + reverbCellH + reverbKnobSize + 2, reverbKnobSize, 18);
+    reverbDryLabel.setBounds(reverbKnobAreaX + 1 * reverbCellW, reverbKnobAreaY + reverbCellH + reverbKnobSize + 2, reverbKnobSize, 18);
+    reverbFreezeButton.setBounds(reverbKnobAreaX + 2 * reverbCellW, reverbKnobAreaY + reverbCellH + (reverbKnobSize / 2) - 10, reverbKnobSize, 24);
 
     constexpr int kMidPanelLeftX = 12;
     constexpr int kMapPanelWidth = 698;
@@ -1941,7 +2167,9 @@ void PictureWaveSynthAudioProcessorEditor::resized()
     const int perfW = layoutWidth - perfX - 12;
 
     mappingTitleLabel.setBounds(24, midBlockTop + 12, 340, 22);
-    envTitleLabel.setBounds(perfX + 12, midBlockTop + 12, juce::jmax(160, perfW - 24), 22);
+    envTitleLabel.setBounds(perfX + 12, midBlockTop + 12, 140, 22);
+    envTypeLabel.setBounds(perfX + perfW - 152, midBlockTop + 12, 36, 22);
+    envTypeCombo.setBounds(perfX + perfW - 110, midBlockTop + 10, 98, 24);
 
     const int mapGroupY = midBlockTop + 34;
     const int mapGroupH = juce::jmax(150, midBlockHeight - 44);
@@ -2132,6 +2360,7 @@ void PictureWaveSynthAudioProcessorEditor::timerCallback()
     refreshModulationVisuals();
     refreshImagePreview();
     refreshWaveformViewers();
+    refreshFxFilterViewer();
 }
 
 void PictureWaveSynthAudioProcessorEditor::refreshWaveformViewers()
@@ -2141,6 +2370,40 @@ void PictureWaveSynthAudioProcessorEditor::refreshWaveformViewers()
     audioProcessor.copyCurrentWaveTablePreview(left, right);
     leftWaveformViewer.setWaveform(left);
     rightWaveformViewer.setWaveform(right);
+}
+
+void PictureWaveSynthAudioProcessorEditor::refreshFxFilterViewer()
+{
+    fxFilterViewer.setFilterState(audioProcessor.getFxFilterSettings(),
+                                  audioProcessor.getSampleRate() > 0.0 ? audioProcessor.getSampleRate() : 44100.0);
+}
+
+void PictureWaveSynthAudioProcessorEditor::updateFxFilterControlState()
+{
+    const auto selectedType = juce::jmax(0, fxFilterTypeCombo.getSelectedId() - 1);
+    const auto gainEnabled = PictureWaveSynthAudioProcessor::fxFilterTypeUsesGain(selectedType);
+    fxFilterGainSlider.setEnabled(gainEnabled);
+    fxFilterGainLabel.setEnabled(gainEnabled);
+    fxFilterGainSlider.setAlpha(gainEnabled ? 1.0f : 0.45f);
+    fxFilterGainLabel.setAlpha(gainEnabled ? 1.0f : 0.45f);
+}
+
+void PictureWaveSynthAudioProcessorEditor::updateEnvelopeControlState()
+{
+    const auto selectedMode = envTypeCombo.getSelectedId();
+    const auto decayEnabled = selectedMode == 1;
+    const auto sustainEnabled = selectedMode != 3;
+
+    const auto setControlState = [](juce::Slider& slider, juce::Label& label, bool enabled)
+    {
+        slider.setEnabled(enabled);
+        label.setEnabled(enabled);
+        slider.setAlpha(enabled ? 1.0f : 0.4f);
+        label.setAlpha(enabled ? 1.0f : 0.4f);
+    };
+
+    setControlState(decaySlider, decayLabel, decayEnabled);
+    setControlState(sustainSlider, sustainLabel, sustainEnabled);
 }
 
 void PictureWaveSynthAudioProcessorEditor::refreshModulationVisuals()
@@ -2175,6 +2438,9 @@ void PictureWaveSynthAudioProcessorEditor::refreshModulationVisuals()
     updateSlider(mapGRSlider, "mapGR");
     updateSlider(mapBRSlider, "mapBR");
     updateSlider(mapARSlider, "mapAR");
+    updateSlider(fxFilterCutoffSlider, "fxFilterCutoff");
+    updateSlider(fxFilterResonanceSlider, "fxFilterResonance");
+    updateSlider(fxFilterGainSlider, "fxFilterGain");
 
     shapeCtrl1Slider.setModulationVisual(0.0f);
     shapeCtrl2Slider.setModulationVisual(0.0f);
