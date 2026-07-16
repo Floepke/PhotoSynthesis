@@ -450,6 +450,8 @@ PictureWaveSynthAudioProcessor::PictureWaveSynthAudioProcessor()
     perVoiceLastPropellorPhase.resize(static_cast<size_t>(kMaxVoices), 0.0);
     perVoiceHasCachedScannerState.resize(static_cast<size_t>(kMaxVoices), false);
 
+    generateFallbackWaveTables(previewWaveTableLeft.data(), previewWaveTableRight.data());
+
     getStateInformation(initialStateWithoutImage);
 }
 
@@ -911,6 +913,69 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
     }
 
     const auto basePropellorPhase = propellorPhase.load();
+
+    if (usePerVoiceScannerState)
+    {
+        auto previewScanner = scanner;
+        const auto readPreviewParam = [this](const char* paramId, float fallbackValue)
+        {
+            const auto index = modTargetIndexForParamId(paramId);
+            if (index < 0)
+            {
+                return fallbackValue;
+            }
+
+            return effectiveDisplayValues[static_cast<size_t>(index)].load();
+        };
+
+        previewScanner.x = readPreviewParam("scanX", previewScanner.x);
+        previewScanner.y = readPreviewParam("scanY", previewScanner.y);
+        previewScanner.length = readPreviewParam("scanLength", previewScanner.length);
+        previewScanner.angleDegrees = readPreviewParam("scanAngle", previewScanner.angleDegrees);
+        previewScanner.ovalX1 = readPreviewParam("ovalX1", previewScanner.ovalX1);
+        previewScanner.ovalY1 = readPreviewParam("ovalY1", previewScanner.ovalY1);
+        previewScanner.ovalX2 = readPreviewParam("ovalX2", previewScanner.ovalX2);
+        previewScanner.ovalY2 = readPreviewParam("ovalY2", previewScanner.ovalY2);
+        previewScanner.rectX = readPreviewParam("rectX", previewScanner.rectX);
+        previewScanner.rectY = readPreviewParam("rectY", previewScanner.rectY);
+        previewScanner.rectWidth = readPreviewParam("rectWidth", previewScanner.rectWidth);
+        previewScanner.rectHeight = readPreviewParam("rectHeight", previewScanner.rectHeight);
+        previewScanner.triX1 = readPreviewParam("triX1", previewScanner.triX1);
+        previewScanner.triY1 = readPreviewParam("triY1", previewScanner.triY1);
+        previewScanner.triX2 = readPreviewParam("triX2", previewScanner.triX2);
+        previewScanner.triY2 = readPreviewParam("triY2", previewScanner.triY2);
+        previewScanner.triX3 = readPreviewParam("triX3", previewScanner.triX3);
+        previewScanner.triY3 = readPreviewParam("triY3", previewScanner.triY3);
+        previewScanner.propX = readPreviewParam("propX", previewScanner.propX);
+        previewScanner.propY = readPreviewParam("propY", previewScanner.propY);
+        previewScanner.propSize = readPreviewParam("propSize", previewScanner.propSize);
+        previewScanner.propSpeed = readPreviewParam("propSpeed", previewScanner.propSpeed);
+        previewScanner.mapRL = readPreviewParam("mapRL", previewScanner.mapRL);
+        previewScanner.mapGL = readPreviewParam("mapGL", previewScanner.mapGL);
+        previewScanner.mapBL = readPreviewParam("mapBL", previewScanner.mapBL);
+        previewScanner.mapAL = readPreviewParam("mapAL", previewScanner.mapAL);
+        previewScanner.mapRR = readPreviewParam("mapRR", previewScanner.mapRR);
+        previewScanner.mapGR = readPreviewParam("mapGR", previewScanner.mapGR);
+        previewScanner.mapBR = readPreviewParam("mapBR", previewScanner.mapBR);
+        previewScanner.mapAR = readPreviewParam("mapAR", previewScanner.mapAR);
+
+        WaveTable previewLeft{};
+        WaveTable previewRight{};
+        if (localImage != nullptr && localImage->width > 1 && localImage->height > 1)
+        {
+            regenerateWaveTablesFromImage(*localImage,
+                                          previewScanner,
+                                          basePropellorPhase,
+                                          previewLeft.data(),
+                                          previewRight.data());
+        }
+        else
+        {
+            generateFallbackWaveTables(previewLeft.data(), previewRight.data());
+        }
+
+        updateWaveTablePreview(previewLeft.data(), previewRight.data());
+    }
 
     for (int i = 0; i < static_cast<int>(voices.size()); ++i)
     {
@@ -1502,10 +1567,24 @@ float PictureWaveSynthAudioProcessor::getEffectiveParameterValue(const char* par
     return effectiveDisplayValues[static_cast<size_t>(index)].load();
 }
 
+void PictureWaveSynthAudioProcessor::copyCurrentWaveTablePreview(WaveTable& left, WaveTable& right) const
+{
+    const juce::SpinLock::ScopedLockType lock(waveTablePreviewLock);
+    left = previewWaveTableLeft;
+    right = previewWaveTableRight;
+}
+
 bool PictureWaveSynthAudioProcessor::hasLoadedImage() const
 {
     const juce::SpinLock::ScopedLockType lock(imageLock);
     return loadedImageData != nullptr;
+}
+
+void PictureWaveSynthAudioProcessor::updateWaveTablePreview(const float* left, const float* right)
+{
+    const juce::SpinLock::ScopedLockType lock(waveTablePreviewLock);
+    std::copy(left, left + kWaveTableSize, previewWaveTableLeft.begin());
+    std::copy(right, right + kWaveTableSize, previewWaveTableRight.begin());
 }
 
 void PictureWaveSynthAudioProcessor::regenerateWaveTablesIfNeeded(const ScannerParams& scanner)
@@ -1534,6 +1613,8 @@ void PictureWaveSynthAudioProcessor::regenerateWaveTablesIfNeeded(const ScannerP
     {
         generateFallbackWaveTables(waveTableLeft.data(), waveTableRight.data());
     }
+
+    updateWaveTablePreview(waveTableLeft.data(), waveTableRight.data());
 
     lastScannerParams = scanner;
     hasLastScannerParams = true;
@@ -1590,25 +1671,26 @@ void PictureWaveSynthAudioProcessor::regenerateWaveTablesFromImage(const LoadedI
         outRight[static_cast<size_t>(i)] = linearInterpolate(sampledRight[static_cast<size_t>(indexA)], sampledRight[static_cast<size_t>(indexB)], frac);
 
     }
-
     const auto meanLeft = sumLeft / static_cast<float>(kWaveTableSize);
     const auto meanRight = sumRight / static_cast<float>(kWaveTableSize);
 
-    float maxAbs = 0.0001f;
+    float maxAbsLeft = 0.0001f;
+    float maxAbsRight = 0.0001f;
     for (int i = 0; i < kWaveTableSize; ++i)
     {
         outLeft[static_cast<size_t>(i)] -= meanLeft;
         outRight[static_cast<size_t>(i)] -= meanRight;
 
-        maxAbs = juce::jmax(maxAbs, std::abs(outLeft[static_cast<size_t>(i)]));
-        maxAbs = juce::jmax(maxAbs, std::abs(outRight[static_cast<size_t>(i)]));
+        maxAbsLeft = juce::jmax(maxAbsLeft, std::abs(outLeft[static_cast<size_t>(i)]));
+        maxAbsRight = juce::jmax(maxAbsRight, std::abs(outRight[static_cast<size_t>(i)]));
     }
 
-    const auto normalise = 0.9f / maxAbs;
+    const auto normaliseLeft = 0.9f / maxAbsLeft;
+    const auto normaliseRight = 0.9f / maxAbsRight;
     for (int i = 0; i < kWaveTableSize; ++i)
     {
-        outLeft[static_cast<size_t>(i)] *= normalise;
-        outRight[static_cast<size_t>(i)] *= normalise;
+        outLeft[static_cast<size_t>(i)] *= normaliseLeft;
+        outRight[static_cast<size_t>(i)] *= normaliseRight;
     }
 }
 

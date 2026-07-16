@@ -121,6 +121,7 @@ private:
         void setModulationVisual(float newAmount);
         void setEffectiveNormalisedValue(float newValue);
         void setMappingOverlayEnabled(bool shouldEnable) { mappingOverlayEnabled = shouldEnable; }
+        void setOverlayAccentColour(juce::Colour newColour) { overlayAccentColour = newColour; }
         void paintOverChildren(juce::Graphics& g) override;
         void mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel) override;
 
@@ -128,6 +129,7 @@ private:
         float modulationAmount = 0.0f;
         float effectiveNormalisedValue = 0.5f;
         bool mappingOverlayEnabled = false;
+        juce::Colour overlayAccentColour = juce::Colour::fromRGB(122, 190, 255);
     };
 
     class LfoVisualizer final : public juce::Component
@@ -144,6 +146,19 @@ private:
         float depth = 1.0f;
         int wave = 1;
         juce::Colour accent = juce::Colour::fromRGB(122, 174, 235);
+    };
+
+    class ScannerWaveformViewer final : public juce::Component
+    {
+    public:
+        explicit ScannerWaveformViewer(juce::Colour newAccent);
+
+        void setWaveform(const PictureWaveSynthAudioProcessor::WaveTable& newSamples);
+        void paint(juce::Graphics& g) override;
+
+    private:
+        PictureWaveSynthAudioProcessor::WaveTable samples{};
+        juce::Colour accent;
     };
 
     class ResettableComboBox final : public juce::ComboBox
@@ -279,6 +294,8 @@ private:
     juce::GroupComponent mapLeftGroup;
     juce::GroupComponent mapRightGroup;
     juce::GroupComponent masterGroup;
+    ScannerWaveformViewer leftWaveformViewer{ juce::Colour::fromRGB(122, 190, 255) };
+    ScannerWaveformViewer rightWaveformViewer{ juce::Colour::fromRGB(255, 166, 102) };
 
     juce::TabbedComponent scannerTabs{ juce::TabbedButtonBar::TabsAtTop };
     juce::Component photoScannerTabPage;
@@ -401,6 +418,7 @@ private:
     void applyUiZoomSelection(bool resizeWindow = true);
     void applyGlobalWidgetScale();
     void refreshModulationVisuals();
+    void refreshWaveformViewers();
     void updateModeControlLabelsAndVisibility();
     bool restoreEditorGeometryFromState();
     void storeEditorGeometryToState();

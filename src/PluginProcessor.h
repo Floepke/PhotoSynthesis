@@ -86,6 +86,8 @@ private:
 class PictureWaveSynthAudioProcessor final : public juce::AudioProcessor
 {
 public:
+    using WaveTable = std::array<float, 2048>;
+
     using juce::AudioProcessor::processBlock;
 
     PictureWaveSynthAudioProcessor();
@@ -127,6 +129,7 @@ public:
     double getPropellorPhase() const;
     float getModulationAmountForParameter(const char* paramId) const;
     float getEffectiveParameterValue(const char* paramId) const;
+    void copyCurrentWaveTablePreview(WaveTable& left, WaveTable& right) const;
 
 private:
     static constexpr int kNumModTargets = 37;
@@ -181,6 +184,7 @@ private:
 
     bool applyLoadedImage(const juce::Image& image, juce::String& errorMessage);
     void clearLoadedImage();
+    void updateWaveTablePreview(const float* left, const float* right);
 
     void regenerateWaveTablesIfNeeded(const ScannerParams& scanner);
     void regenerateWaveTablesFromImage(const LoadedImageData& imageData,
@@ -195,10 +199,13 @@ private:
 
     RoundRobinSynthesiser synth;
     mutable juce::SpinLock imageLock;
+    mutable juce::SpinLock waveTablePreviewLock;
     std::shared_ptr<LoadedImageData> loadedImageData;
     std::vector<SineWaveVoice*> voices;
     std::array<float, kWaveTableSize> waveTableLeft{};
     std::array<float, kWaveTableSize> waveTableRight{};
+    WaveTable previewWaveTableLeft{};
+    WaveTable previewWaveTableRight{};
     std::vector<std::array<float, kWaveTableSize>> perVoiceWaveTableLeft;
     std::vector<std::array<float, kWaveTableSize>> perVoiceWaveTableRight;
     std::vector<std::array<float, kNumModTargets>> perVoiceSmoothedModulationSums;

@@ -110,16 +110,15 @@ void PictureWaveSynthAudioProcessorEditor::ModulationSlider::paintOverChildren(j
     {
         auto area = sliderLayout.sliderBounds.toFloat().reduced(3.0f);
         const auto radius = juce::jmax(6.0f, juce::jmin(area.getWidth(), area.getHeight()) * 0.5f - 1.5f);
-        const auto thickness = juce::jmax(2.0f, radius * 0.11f);
+        const auto thickness = mappingOverlayEnabled
+            ? juce::jmax(3.5f, radius * 0.17f)
+            : juce::jmax(2.0f, radius * 0.11f);
         const auto centreX = area.getCentreX();
         const auto centreY = area.getCentreY();
         const auto startAngle = juce::MathConstants<float>::pi * 1.2f;
         const auto endAngle = juce::MathConstants<float>::pi * 2.8f;
         const auto totalAngle = endAngle - startAngle;
-        const auto indicatorAngle = startAngle + totalAngle * effectiveNormalisedValue;
-        const auto indicatorSweep = juce::jmax(0.12f, totalAngle * 0.075f);
-        const auto arcStart = juce::jlimit(startAngle, endAngle, indicatorAngle - indicatorSweep * 0.5f);
-        const auto arcEnd = juce::jlimit(startAngle, endAngle, indicatorAngle + indicatorSweep * 0.5f);
+        const auto centerAngle = startAngle + totalAngle * 0.5f;
 
         juce::Path baseArc;
         baseArc.addCentredArc(centreX, centreY, radius, radius, 0.0f, startAngle, endAngle, true);
@@ -127,9 +126,41 @@ void PictureWaveSynthAudioProcessorEditor::ModulationSlider::paintOverChildren(j
         g.strokePath(baseArc, juce::PathStrokeType(thickness));
 
         juce::Path activeArc;
-        activeArc.addCentredArc(centreX, centreY, radius, radius, 0.0f, arcStart, arcEnd, true);
-        g.setColour(accent);
-        g.strokePath(activeArc, juce::PathStrokeType(thickness, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        if (mappingOverlayEnabled)
+        {
+            const auto targetAngle = startAngle + totalAngle * effectiveNormalisedValue;
+            const auto arcStart = juce::jmin(centerAngle, targetAngle);
+            const auto arcEnd = juce::jmax(centerAngle, targetAngle);
+            if (std::abs(targetAngle - centerAngle) > 0.0005f)
+            {
+                activeArc.addCentredArc(centreX, centreY, radius, radius, 0.0f, arcStart, arcEnd, true);
+            }
+
+            juce::Path centerMarker;
+            centerMarker.addCentredArc(centreX, centreY, radius, radius, 0.0f,
+                                       centerAngle - totalAngle * 0.02f,
+                                       centerAngle + totalAngle * 0.02f,
+                                       true);
+            g.setColour(juce::Colours::white.withAlpha(0.22f));
+            g.strokePath(centerMarker, juce::PathStrokeType(thickness));
+        }
+        else
+        {
+            const auto indicatorAngle = startAngle + totalAngle * effectiveNormalisedValue;
+            const auto indicatorSweep = juce::jmax(0.12f, totalAngle * 0.075f);
+            const auto arcStart = juce::jlimit(startAngle, endAngle, indicatorAngle - indicatorSweep * 0.5f);
+            const auto arcEnd = juce::jlimit(startAngle, endAngle, indicatorAngle + indicatorSweep * 0.5f);
+            activeArc.addCentredArc(centreX, centreY, radius, radius, 0.0f, arcStart, arcEnd, true);
+        }
+
+        const auto overlayColour = mappingOverlayEnabled
+            ? overlayAccentColour.withAlpha(0.82f)
+            : accent;
+        g.setColour(overlayColour);
+        if (!activeArc.isEmpty())
+        {
+            g.strokePath(activeArc, juce::PathStrokeType(thickness, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        }
         return;
     }
 
@@ -141,20 +172,8 @@ void PictureWaveSynthAudioProcessorEditor::ModulationSlider::paintOverChildren(j
         g.setColour(juce::Colours::white.withAlpha(0.08f));
         g.fillRoundedRectangle(area.getRight() - 4.0f, area.getY(), 4.0f, area.getHeight(), 2.0f);
 
-        if (mappingOverlayEnabled)
-        {
-            const auto centerY = area.getBottom() - area.getHeight() * 0.5f;
-            const auto fillTop = juce::jmin(centerY, markerY);
-            const auto fillHeight = juce::jmax(2.0f, std::abs(markerY - centerY));
-            g.fillRoundedRectangle(area.getX() + 1.0f, centerY - 1.5f, area.getWidth() - 2.0f, 3.0f, 1.5f);
-            g.setColour(verticalAccent);
-            g.fillRoundedRectangle(area.getX() + 1.0f, fillTop - 1.5f, area.getWidth() - 2.0f, fillHeight + 3.0f, 2.0f);
-        }
-        else
-        {
-            g.setColour(verticalAccent);
-            g.fillRoundedRectangle(area.getX() + 1.0f, markerY - 1.5f, area.getWidth() - 2.0f, 3.0f, 1.5f);
-        }
+        g.setColour(verticalAccent);
+        g.fillRoundedRectangle(area.getX() + 1.0f, markerY - 1.5f, area.getWidth() - 2.0f, 3.0f, 1.5f);
     }
     else
     {
@@ -263,6 +282,54 @@ float PictureWaveSynthAudioProcessorEditor::LfoVisualizer::sampleWave(float phas
             return std::sin(t * juce::MathConstants<float>::twoPi);
         }
     }
+}
+
+PictureWaveSynthAudioProcessorEditor::ScannerWaveformViewer::ScannerWaveformViewer(juce::Colour newAccent)
+    : accent(newAccent)
+{
+}
+
+void PictureWaveSynthAudioProcessorEditor::ScannerWaveformViewer::setWaveform(const PictureWaveSynthAudioProcessor::WaveTable& newSamples)
+{
+    samples = newSamples;
+    repaint();
+}
+
+void PictureWaveSynthAudioProcessorEditor::ScannerWaveformViewer::paint(juce::Graphics& g)
+{
+    auto area = getLocalBounds().toFloat();
+    g.setColour(juce::Colour::fromRGB(20, 24, 31));
+    g.fillRoundedRectangle(area, 6.0f);
+
+    area.reduce(8.0f, 8.0f);
+    if (area.getWidth() < 4.0f || area.getHeight() < 4.0f)
+    {
+        return;
+    }
+
+    const auto midY = area.getCentreY();
+    g.setColour(juce::Colours::white.withAlpha(0.10f));
+    g.drawHorizontalLine(static_cast<int>(std::round(midY)), area.getX(), area.getRight());
+
+    juce::Path waveform;
+    for (size_t i = 0; i < samples.size(); ++i)
+    {
+        const auto x = area.getX() + (area.getWidth() * static_cast<float>(i)) / static_cast<float>(samples.size() - 1);
+        const auto y = midY - samples[i] * area.getHeight() * 0.42f;
+        if (i == 0)
+        {
+            waveform.startNewSubPath(x, y);
+        }
+        else
+        {
+            waveform.lineTo(x, y);
+        }
+    }
+
+    g.setColour(accent.withAlpha(0.90f));
+    g.strokePath(waveform, juce::PathStrokeType(1.75f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    g.setColour(accent.withAlpha(0.18f));
+    g.drawRoundedRectangle(getLocalBounds().toFloat().reduced(0.5f), 6.0f, 1.0f);
 }
 
 void PictureWaveSynthAudioProcessorEditor::LfoVisualizer::paint(juce::Graphics& g)
@@ -1044,6 +1111,9 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
     mapRightGroup.setColour(juce::GroupComponent::textColourId, juce::Colour::fromRGB(231, 235, 242));
     addAndMakeVisible(mapRightGroup);
 
+    addAndMakeVisible(leftWaveformViewer);
+    addAndMakeVisible(rightWaveformViewer);
+
     masterGroup.setText("Master");
     masterGroup.setColour(juce::GroupComponent::outlineColourId, juce::Colour::fromRGB(65, 73, 88));
     masterGroup.setColour(juce::GroupComponent::textColourId, juce::Colour::fromRGB(231, 235, 242));
@@ -1419,31 +1489,47 @@ void PictureWaveSynthAudioProcessorEditor::setupScannerSlider(juce::Slider& slid
 
 void PictureWaveSynthAudioProcessorEditor::setupMappingSlider(juce::Slider& slider, juce::Label& label, const juce::String& name)
 {
-    setupBipolarSlider(slider, name);
+    setupRotarySlider(slider, name);
     if (auto* modulationSlider = dynamic_cast<ModulationSlider*>(&slider))
     {
         modulationSlider->setMappingOverlayEnabled(true);
     }
     if (name.startsWithIgnoreCase("R"))
     {
-        slider.setColour(juce::Slider::thumbColourId, juce::Colour::fromRGB(230, 74, 74));
-        slider.setColour(juce::Slider::trackColourId, juce::Colours::transparentBlack);
+        const auto colour = juce::Colour::fromRGB(230, 74, 74);
+        if (auto* modulationSlider = dynamic_cast<ModulationSlider*>(&slider))
+        {
+            modulationSlider->setOverlayAccentColour(colour);
+        }
     }
     else if (name.startsWithIgnoreCase("G"))
     {
-        slider.setColour(juce::Slider::thumbColourId, juce::Colour::fromRGB(90, 210, 120));
-        slider.setColour(juce::Slider::trackColourId, juce::Colours::transparentBlack);
+        const auto colour = juce::Colour::fromRGB(90, 210, 120);
+        if (auto* modulationSlider = dynamic_cast<ModulationSlider*>(&slider))
+        {
+            modulationSlider->setOverlayAccentColour(colour);
+        }
     }
     else if (name.startsWithIgnoreCase("B"))
     {
-        slider.setColour(juce::Slider::thumbColourId, juce::Colour::fromRGB(84, 151, 255));
-        slider.setColour(juce::Slider::trackColourId, juce::Colours::transparentBlack);
+        const auto colour = juce::Colour::fromRGB(84, 151, 255);
+        if (auto* modulationSlider = dynamic_cast<ModulationSlider*>(&slider))
+        {
+            modulationSlider->setOverlayAccentColour(colour);
+        }
     }
     else if (name.startsWithIgnoreCase("A"))
     {
-        slider.setColour(juce::Slider::thumbColourId, juce::Colour::fromRGB(170, 174, 182));
-        slider.setColour(juce::Slider::trackColourId, juce::Colours::transparentBlack);
+        const auto colour = juce::Colour::fromRGB(170, 174, 182);
+        if (auto* modulationSlider = dynamic_cast<ModulationSlider*>(&slider))
+        {
+            modulationSlider->setOverlayAccentColour(colour);
+        }
     }
+
+    slider.setColour(juce::Slider::thumbColourId, juce::Colours::transparentBlack);
+    slider.setColour(juce::Slider::rotarySliderFillColourId, juce::Colours::transparentBlack);
+    slider.setColour(juce::Slider::rotarySliderOutlineColourId, juce::Colours::transparentBlack);
 
     label.setText(name, juce::dontSendNotification);
     label.setJustificationType(juce::Justification::centred);
@@ -1857,33 +1943,41 @@ void PictureWaveSynthAudioProcessorEditor::resized()
     mappingTitleLabel.setBounds(24, midBlockTop + 12, 340, 22);
     envTitleLabel.setBounds(perfX + 12, midBlockTop + 12, juce::jmax(160, perfW - 24), 22);
 
-    const int mapTop = midBlockTop + 44;
     const int mapGroupY = midBlockTop + 34;
     const int mapGroupH = juce::jmax(150, midBlockHeight - 44);
     const int mapGroupW = 332;
     const int mapInnerX = 16;
-    const int mapSliderW = 62;
-    const int mapSliderGap = 8;
-    const int mapSliderH = juce::jmax(108, mapGroupH - 94);
-    const int mapLabelTop = mapTop + mapSliderH + 8;
+    const int mapKnobSize = 62;
+    const int mapKnobGap = 8;
+    const int mapViewerInset = 14;
+    const int mapViewerH = juce::jlimit(56, 92, mapGroupH / 3);
+    const int mapViewerTop = mapGroupY + mapGroupH - mapViewerInset - mapViewerH;
+    const int mapControlTop = mapGroupY + 26;
+    const int mapControlBottom = mapViewerTop - 10;
+    const int mapControlBlockH = mapKnobSize + 22;
+    const int mapTop = mapControlTop + juce::jmax(0, (mapControlBottom - mapControlTop - mapControlBlockH) / 2);
+    const int mapLabelTop = mapTop + mapKnobSize + 4;
 
     mapLeftGroup.setBounds(20, mapGroupY, mapGroupW, mapGroupH);
     mapRightGroup.setBounds(360, mapGroupY, mapGroupW, mapGroupH);
 
-    auto placeMapGroupSlider = [mapLabelTop, mapSliderH](int x, juce::Slider& slider, juce::Label& label)
+    auto placeMapGroupSlider = [mapTop, mapLabelTop, mapKnobSize](int x, juce::Slider& slider, juce::Label& label)
     {
-        slider.setBounds(x, mapTop, mapSliderW, mapSliderH);
-        label.setBounds(x - 4, mapLabelTop, mapSliderW + 8, 18);
+        slider.setBounds(x, mapTop, mapKnobSize, mapKnobSize);
+        label.setBounds(x - 4, mapLabelTop, mapKnobSize + 8, 18);
     };
 
-    placeMapGroupSlider(20 + mapInnerX + 0 * (mapSliderW + mapSliderGap), mapRLSlider, mapRLLabel);
-    placeMapGroupSlider(20 + mapInnerX + 1 * (mapSliderW + mapSliderGap), mapGLSlider, mapGLLabel);
-    placeMapGroupSlider(20 + mapInnerX + 2 * (mapSliderW + mapSliderGap), mapBLSlider, mapBLLabel);
-    placeMapGroupSlider(20 + mapInnerX + 3 * (mapSliderW + mapSliderGap), mapALSlider, mapALLabel);
-    placeMapGroupSlider(360 + mapInnerX + 0 * (mapSliderW + mapSliderGap), mapRRSlider, mapRRLabel);
-    placeMapGroupSlider(360 + mapInnerX + 1 * (mapSliderW + mapSliderGap), mapGRSlider, mapGRLabel);
-    placeMapGroupSlider(360 + mapInnerX + 2 * (mapSliderW + mapSliderGap), mapBRSlider, mapBRLabel);
-    placeMapGroupSlider(360 + mapInnerX + 3 * (mapSliderW + mapSliderGap), mapARSlider, mapARLabel);
+    placeMapGroupSlider(20 + mapInnerX + 0 * (mapKnobSize + mapKnobGap), mapRLSlider, mapRLLabel);
+    placeMapGroupSlider(20 + mapInnerX + 1 * (mapKnobSize + mapKnobGap), mapGLSlider, mapGLLabel);
+    placeMapGroupSlider(20 + mapInnerX + 2 * (mapKnobSize + mapKnobGap), mapBLSlider, mapBLLabel);
+    placeMapGroupSlider(20 + mapInnerX + 3 * (mapKnobSize + mapKnobGap), mapALSlider, mapALLabel);
+    placeMapGroupSlider(360 + mapInnerX + 0 * (mapKnobSize + mapKnobGap), mapRRSlider, mapRRLabel);
+    placeMapGroupSlider(360 + mapInnerX + 1 * (mapKnobSize + mapKnobGap), mapGRSlider, mapGRLabel);
+    placeMapGroupSlider(360 + mapInnerX + 2 * (mapKnobSize + mapKnobGap), mapBRSlider, mapBRLabel);
+    placeMapGroupSlider(360 + mapInnerX + 3 * (mapKnobSize + mapKnobGap), mapARSlider, mapARLabel);
+
+    leftWaveformViewer.setBounds(20 + 12, mapViewerTop, mapGroupW - 24, mapViewerH);
+    rightWaveformViewer.setBounds(360 + 12, mapViewerTop, mapGroupW - 24, mapViewerH);
 
     const int perfTop = midBlockTop + 40;
     const int perfLabelH = 18;
@@ -2037,6 +2131,16 @@ void PictureWaveSynthAudioProcessorEditor::timerCallback()
 
     refreshModulationVisuals();
     refreshImagePreview();
+    refreshWaveformViewers();
+}
+
+void PictureWaveSynthAudioProcessorEditor::refreshWaveformViewers()
+{
+    PictureWaveSynthAudioProcessor::WaveTable left{};
+    PictureWaveSynthAudioProcessor::WaveTable right{};
+    audioProcessor.copyCurrentWaveTablePreview(left, right);
+    leftWaveformViewer.setWaveform(left);
+    rightWaveformViewer.setWaveform(right);
 }
 
 void PictureWaveSynthAudioProcessorEditor::refreshModulationVisuals()
