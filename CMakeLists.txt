@@ -58,7 +58,15 @@ target_link_libraries(PhotoSynthesis
   PUBLIC
     juce::juce_recommended_config_flags
     juce::juce_recommended_lto_flags
-    juce::juce_recommended_warning_flags
 )
+
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+  # Silence recurring non-critical warnings that are currently intentional/known.
+  target_compile_options(PhotoSynthesis PRIVATE
+    -Wno-float-equal
+    -Wno-shadow
+    -Wno-deprecated-declarations
+  )
+endif()
 
 juce_generate_juce_header(PhotoSynthesis)

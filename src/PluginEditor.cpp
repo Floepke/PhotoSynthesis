@@ -1213,7 +1213,7 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
     setupSmallLabel(noteDriftLabel, "Note Drift");
     setupSmallLabel(liveNoteDriftLabel, "Drift Freq");
 
-    envTypeLabel.setText("Env", juce::dontSendNotification);
+    envTypeLabel.setText("Env.", juce::dontSendNotification);
     envTypeLabel.setJustificationType(juce::Justification::centredRight);
     envTypeLabel.setColour(juce::Label::textColourId, juce::Colour::fromRGB(214, 219, 230));
     addAndMakeVisible(envTypeLabel);
@@ -1253,6 +1253,16 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
     masterGroup.setColour(juce::GroupComponent::outlineColourId, juce::Colour::fromRGB(65, 73, 88));
     masterGroup.setColour(juce::GroupComponent::textColourId, juce::Colour::fromRGB(231, 235, 242));
     addAndMakeVisible(masterGroup);
+
+    adsrGroup.setText("ADSR Envelope");
+    adsrGroup.setColour(juce::GroupComponent::outlineColourId, juce::Colour::fromRGB(65, 73, 88));
+    adsrGroup.setColour(juce::GroupComponent::textColourId, juce::Colour::fromRGB(231, 235, 242));
+    addAndMakeVisible(adsrGroup);
+
+    driftGroup.setText("Drift");
+    driftGroup.setColour(juce::GroupComponent::outlineColourId, juce::Colour::fromRGB(65, 73, 88));
+    driftGroup.setColour(juce::GroupComponent::textColourId, juce::Colour::fromRGB(231, 235, 242));
+    addAndMakeVisible(driftGroup);
 
     attackAttachment = std::make_unique<SliderAttachment>(
         audioProcessor.parameters, "attack", attackSlider);
@@ -2168,8 +2178,8 @@ void PictureWaveSynthAudioProcessorEditor::resized()
 
     mappingTitleLabel.setBounds(24, midBlockTop + 12, 340, 22);
     envTitleLabel.setBounds(perfX + 12, midBlockTop + 12, 140, 22);
-    envTypeLabel.setBounds(perfX + perfW - 152, midBlockTop + 12, 36, 22);
-    envTypeCombo.setBounds(perfX + perfW - 110, midBlockTop + 10, 98, 24);
+    envTypeLabel.setBounds(perfX + perfW - 152, midBlockTop + 8, 36, 22);
+    envTypeCombo.setBounds(perfX + perfW - 110, midBlockTop + 6, 98, 24);
 
     const int mapGroupY = midBlockTop + 34;
     const int mapGroupH = juce::jmax(150, midBlockHeight - 44);
@@ -2207,40 +2217,60 @@ void PictureWaveSynthAudioProcessorEditor::resized()
     leftWaveformViewer.setBounds(20 + 12, mapViewerTop, mapGroupW - 24, mapViewerH);
     rightWaveformViewer.setBounds(360 + 12, mapViewerTop, mapGroupW - 24, mapViewerH);
 
-    const int perfTop = midBlockTop + 40;
-    const int perfLabelH = 18;
     const int perfInnerX = perfX + 12;
     const int perfInnerW = juce::jmax(280, perfW - 24);
-    const int controlCount = 6;
-    int knobW = 60;
-    int knobGap = (perfInnerW - controlCount * knobW) / (controlCount - 1);
-    if (knobGap < 4)
-    {
-        knobW = juce::jmax(48, (perfInnerW - 4 * (controlCount - 1)) / controlCount);
-        knobGap = juce::jmax(4, (perfInnerW - controlCount * knobW) / (controlCount - 1));
-    }
-    else
-    {
-        knobGap = juce::jmin(12, knobGap);
-    }
+    const int adsrGroupY = mapGroupY;
+    const int driftGroupY = adsrGroupY;
+    const int perfBottomY = mapGroupY + mapGroupH;
+    const int adsrGroupH = juce::jmax(120, perfBottomY - adsrGroupY);
+    const int driftGroupH = juce::jmax(120, perfBottomY - driftGroupY);
+    const int perfGroupGap = 10;
+    const int adsrW = juce::jmax(170, (perfInnerW * 2) / 3);
+    const int driftW = juce::jmax(120, perfInnerW - adsrW - perfGroupGap);
 
-    const int knobTop = perfTop + 18;
-    const int knobH = juce::jmax(70, midBlockHeight - 92);
-    const int labelTop = knobTop + knobH + 4;
+    adsrGroup.setBounds(perfInnerX, adsrGroupY, adsrW, adsrGroupH);
+    driftGroup.setBounds(perfInnerX + adsrW + perfGroupGap, driftGroupY, driftW, driftGroupH);
 
-    auto layoutPerfControl = [knobW, knobH, knobGap, labelTop](int index, juce::Slider& slider, juce::Label& label)
+    const auto layoutGroupControls = [](juce::Rectangle<int> bounds,
+                                        int controlCount,
+                                        std::array<juce::Slider*, 4> sliders,
+                                        std::array<juce::Label*, 4> labels)
     {
-        const int x = perfInnerX + index * (knobW + knobGap);
-        slider.setBounds(x, knobTop, knobW, knobH);
-        label.setBounds(x - 6, labelTop, knobW + 12, perfLabelH);
+        const int labelH = 18;
+        auto inner = bounds.reduced(12, 22);
+        const int knobH = juce::jmax(64, inner.getHeight() - labelH - 8);
+        int knobW = juce::jlimit(40, 64, (inner.getWidth() - juce::jmax(0, controlCount - 1) * 6) / juce::jmax(1, controlCount));
+        int gap = controlCount > 1 ? (inner.getWidth() - controlCount * knobW) / (controlCount - 1) : 0;
+        if (gap < 4)
+        {
+            knobW = juce::jmax(36, (inner.getWidth() - juce::jmax(0, controlCount - 1) * 4) / juce::jmax(1, controlCount));
+            gap = controlCount > 1 ? juce::jmax(4, (inner.getWidth() - controlCount * knobW) / (controlCount - 1)) : 0;
+        }
+        const int knobY = inner.getY();
+        const int labelY = knobY + knobH + 4;
+
+        for (int i = 0; i < controlCount; ++i)
+        {
+            const int x = inner.getX() + i * (knobW + gap);
+            if (sliders[static_cast<size_t>(i)] != nullptr)
+            {
+                sliders[static_cast<size_t>(i)]->setBounds(x, knobY, knobW, knobH);
+            }
+            if (labels[static_cast<size_t>(i)] != nullptr)
+            {
+                labels[static_cast<size_t>(i)]->setBounds(x - 6, labelY, knobW + 12, labelH);
+            }
+        }
     };
 
-    layoutPerfControl(0, attackSlider, attackLabel);
-    layoutPerfControl(1, decaySlider, decayLabel);
-    layoutPerfControl(2, sustainSlider, sustainLabel);
-    layoutPerfControl(3, releaseSlider, releaseLabel);
-    layoutPerfControl(4, noteDriftSlider, noteDriftLabel);
-    layoutPerfControl(5, liveNoteDriftSlider, liveNoteDriftLabel);
+    layoutGroupControls(adsrGroup.getBounds(),
+                        4,
+                        { &attackSlider, &decaySlider, &sustainSlider, &releaseSlider },
+                        { &attackLabel, &decayLabel, &sustainLabel, &releaseLabel });
+    layoutGroupControls(driftGroup.getBounds(),
+                        2,
+                        { &noteDriftSlider, &liveNoteDriftSlider, nullptr, nullptr },
+                        { &noteDriftLabel, &liveNoteDriftLabel, nullptr, nullptr });
 
     modulationTitleLabel.setBounds(24, modulationTop + 12, 260, 22);
 

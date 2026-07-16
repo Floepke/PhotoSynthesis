@@ -307,6 +307,8 @@ private:
     juce::GroupComponent mapLeftGroup;
     juce::GroupComponent mapRightGroup;
     juce::GroupComponent masterGroup;
+    juce::GroupComponent adsrGroup;
+    juce::GroupComponent driftGroup;
     ScannerWaveformViewer leftWaveformViewer{ juce::Colour::fromRGB(122, 190, 255) };
     ScannerWaveformViewer rightWaveformViewer{ juce::Colour::fromRGB(255, 166, 102) };
 
