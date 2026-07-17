@@ -1,5 +1,6 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "BinaryData.h"
 
 #include <algorithm>
 #include <cmath>
@@ -30,25 +31,68 @@ const std::array<const char*, 9> kSyncDivisionNames{ "1/1", "1/2", "1/4", "1/8",
 const std::array<double, 9> kSyncDivisionBeatsPerCycle{ 4.0, 2.0, 1.0, 0.5, 0.25, 4.0 / 3.0, 2.0 / 3.0, 1.0 / 3.0, 1.0 / 6.0 };
 const std::array<int, 7> kScanResolutionValues{ 32, 64, 128, 256, 512, 1024, 2048 };
 
-const std::array<const char*, 37> kModTargetParamIds{
+const std::array<const char*, 39> kModTargetParamIds{
     "attack", "decay", "sustain", "release", "gain", "noteDrift", "liveNoteDrift",
     "lineX1", "lineY1", "lineX2", "lineY2",
-    "ovalX1", "ovalY1", "ovalX2", "ovalY2",
-    "rectX", "rectY", "rectWidth", "rectHeight",
+    "ovalX1", "ovalY1", "ovalX2", "ovalY2", "ovalRotation",
+    "rectX", "rectY", "rectWidth", "rectHeight", "rectRotation",
     "triX1", "triY1", "triX2", "triY2", "triX3", "triY3",
     "propX", "propY", "propSize", "propSpeed",
     "mapRL", "mapGL", "mapBL", "mapAL", "mapRR", "mapGR", "mapBR", "mapAR"
 };
 
-const std::array<const char*, 38> kModTargetNames{
+const std::array<const char*, 40> kModTargetNames{
     "None",
     "Attack", "Decay", "Sustain", "Release", "Gain", "Note Drift", "Drift Freq",
-    "Line X1", "Line Y1", "Line X2", "Line Y2",
-    "Oval X1", "Oval Y1", "Oval X2", "Oval Y2",
-    "Rect X", "Rect Y", "Rect Width", "Rect Height",
+    "Line X1", "Line Y1", "Line X2", "Line Y2", 
+    "Oval X1", "Oval Y1", "Oval X2", "Oval Y2", "Oval Rot",
+    "Rect X", "Rect Y", "Rect Width", "Rect Height", "Rect Rot",
     "Tri X1", "Tri Y1", "Tri X2", "Tri Y2", "Tri X3", "Tri Y3",
     "Prop X", "Prop Y", "Prop Size", "Prop Speed",
     "R->L", "G->L", "B->L", "A->L", "R->R", "G->R", "B->R", "A->R"
+};
+
+enum ModTargetIndex
+{
+    mtAttack = 0,
+    mtDecay,
+    mtSustain,
+    mtRelease,
+    mtGain,
+    mtNoteDrift,
+    mtLiveNoteDrift,
+    mtLineX1,
+    mtLineY1,
+    mtLineX2,
+    mtLineY2,
+    mtOvalX1,
+    mtOvalY1,
+    mtOvalX2,
+    mtOvalY2,
+    mtOvalRotation,
+    mtRectX,
+    mtRectY,
+    mtRectWidth,
+    mtRectHeight,
+    mtRectRotation,
+    mtTriX1,
+    mtTriY1,
+    mtTriX2,
+    mtTriY2,
+    mtTriX3,
+    mtTriY3,
+    mtPropX,
+    mtPropY,
+    mtPropSize,
+    mtPropSpeed,
+    mtMapRL,
+    mtMapGL,
+    mtMapBL,
+    mtMapAL,
+    mtMapRR,
+    mtMapGR,
+    mtMapBR,
+    mtMapAR
 };
 
 template <typename T>
@@ -175,6 +219,18 @@ int modTargetIndexForParamId(const char* paramId)
     return -1;
 }
 
+std::array<float, 2> rotatePointAroundCenter(float x, float y, float cx, float cy, float angleRadians)
+{
+    const auto dx = x - cx;
+    const auto dy = y - cy;
+    const auto cosA = std::cos(angleRadians);
+    const auto sinA = std::sin(angleRadians);
+    return {
+        cx + dx * cosA - dy * sinA,
+        cy + dx * sinA + dy * cosA
+    };
+}
+
 enum FxFilterType
 {
     fxFilterOff = 0,
@@ -187,6 +243,26 @@ enum FxFilterType
     fxFilterHighShelf,
     fxFilterAllPass
 };
+
+bool fxSettingsEqual(const PictureWaveSynthAudioProcessor::FxFilterSettings& a,
+                     const PictureWaveSynthAudioProcessor::FxFilterSettings& b)
+{
+    return a.type == b.type
+        && juce::approximatelyEqual(a.cutoffHz, b.cutoffHz)
+        && juce::approximatelyEqual(a.resonance, b.resonance)
+        && juce::approximatelyEqual(a.gainDecibels, b.gainDecibels);
+}
+
+bool reverbSettingsEqual(const PictureWaveSynthAudioProcessor::ReverbSettings& a,
+                         const PictureWaveSynthAudioProcessor::ReverbSettings& b)
+{
+    return juce::approximatelyEqual(a.roomSize, b.roomSize)
+        && juce::approximatelyEqual(a.damping, b.damping)
+        && juce::approximatelyEqual(a.width, b.width)
+        && juce::approximatelyEqual(a.wetLevel, b.wetLevel)
+        && juce::approximatelyEqual(a.dryLevel, b.dryLevel)
+        && juce::approximatelyEqual(a.freezeMode, b.freezeMode);
+}
 }
 
 void SineWaveVoice::prepare(double sampleRate, int samplesPerBlock, int outputChannels)
@@ -572,6 +648,7 @@ PictureWaveSynthAudioProcessor::PictureWaveSynthAudioProcessor()
     : AudioProcessor(BusesProperties().withOutput("Output", juce::AudioChannelSet::stereo(), true)),
       parameters(*this, nullptr, "PARAMETERS", createParameterLayout())
 {
+    cacheParameterPointers();
     instanceRandom.setSeed(static_cast<int64>(makeUniqueSeed(this, 0x31415926u)));
 
     synth.clearVoices();
@@ -600,6 +677,10 @@ PictureWaveSynthAudioProcessor::PictureWaveSynthAudioProcessor()
     perVoiceHasCachedScannerState.resize(static_cast<size_t>(kMaxVoices), false);
 
     generateFallbackWaveTables(previewWaveTableLeft.data(), previewWaveTableRight.data());
+
+    {
+        setStateInformation(BinaryData::init_pspreset, BinaryData::init_pspresetSize);
+    }
 
     getStateInformation(initialStateWithoutImage);
 }
@@ -660,11 +741,14 @@ void PictureWaveSynthAudioProcessor::prepareToPlay(double sampleRate, int sample
     fxSpec.numChannels = static_cast<uint32_t>(juce::jmax(1, getTotalNumOutputChannels()));
     dcBlocker.prepare(fxSpec);
     dcBlocker.reset();
+    hasLastDcSampleRate = false;
     updateDcBlocker();
     fxFilter.prepare(fxSpec);
     fxFilter.reset();
+    hasLastFxSettings = false;
     updateFxFilter();
     reverb.reset();
+    hasLastReverbSettings = false;
     updateReverb();
 }
 
@@ -701,6 +785,15 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
     juce::ScopedNoDenormals noDenormals;
     buffer.clear();
 
+    const auto loadValue = [this](std::atomic<float>* raw, const char* fallbackId)
+    {
+        if (raw != nullptr)
+            return raw->load();
+        if (auto* fallback = parameters.getRawParameterValue(fallbackId))
+            return fallback->load();
+        return 0.0f;
+    };
+
     for (const auto metadata : midiMessages)
     {
         const auto message = metadata.getMessage();
@@ -733,7 +826,7 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
 
     const std::array<int, 8> polyphonyChoices{ 4, 8, 12, 16, 24, 32, 48, 64 };
     const auto polyChoiceIndex = juce::jlimit(0, static_cast<int>(polyphonyChoices.size()) - 1,
-                                              static_cast<int>(std::lround(parameters.getRawParameterValue("maxVoices")->load())));
+                                              static_cast<int>(std::lround(loadValue(paramCache.maxVoices, "maxVoices"))));
     const auto maxVoices = polyphonyChoices[static_cast<size_t>(polyChoiceIndex)];
     synth.setActiveVoiceLimit(maxVoices);
 
@@ -753,13 +846,12 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
     std::array<bool, kNumLfos> lfoRandomPhasePerVoice{};
     for (int i = 0; i < kNumLfos; ++i)
     {
-        const juce::String idx = juce::String(i + 1);
-        const auto rateHz = juce::jmax(0.01f, parameters.getRawParameterValue("lfo" + idx + "Rate")->load());
-        const auto depth = juce::jlimit(0.0f, 1.0f, parameters.getRawParameterValue("lfo" + idx + "Depth")->load());
-        const auto waveform = static_cast<int>(std::lround(parameters.getRawParameterValue("lfo" + idx + "Wave")->load()));
-        const auto syncEnabled = parameters.getRawParameterValue("lfo" + idx + "Sync")->load() > 0.5f;
-        const auto division = static_cast<int>(std::lround(parameters.getRawParameterValue("lfo" + idx + "Division")->load()));
-        const auto randomPhasePerVoice = parameters.getRawParameterValue("lfo" + idx + "RandomPhasePerVoice")->load() > 0.5f;
+        const auto rateHz = juce::jmax(0.01f, loadValue(paramCache.lfoRate[static_cast<size_t>(i)], "lfo1Rate"));
+        const auto depth = juce::jlimit(0.0f, 1.0f, loadValue(paramCache.lfoDepth[static_cast<size_t>(i)], "lfo1Depth"));
+        const auto waveform = static_cast<int>(std::lround(loadValue(paramCache.lfoWave[static_cast<size_t>(i)], "lfo1Wave")));
+        const auto syncEnabled = loadValue(paramCache.lfoSync[static_cast<size_t>(i)], "lfo1Sync") > 0.5f;
+        const auto division = static_cast<int>(std::lround(loadValue(paramCache.lfoDivision[static_cast<size_t>(i)], "lfo1Division")));
+        const auto randomPhasePerVoice = loadValue(paramCache.lfoRandomPhasePerVoice[static_cast<size_t>(i)], "lfo1RandomPhasePerVoice") > 0.5f;
 
         lfoDepths[static_cast<size_t>(i)] = depth;
         lfoWaveforms[static_cast<size_t>(i)] = waveform;
@@ -805,7 +897,7 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
     std::array<ModRouteState, kNumModRoutes> routes{};
     std::array<float, kModTargetParamIds.size()> modulationSums{};
     modulationSums.fill(0.0f);
-    const auto responseMs = juce::jlimit(0.0f, 500.0f, parameters.getRawParameterValue("modResponseMs")->load());
+    const auto responseMs = juce::jlimit(0.0f, 500.0f, loadValue(paramCache.modResponseMs, "modResponseMs"));
     const auto responseSeconds = static_cast<double>(responseMs) * 0.001;
     const auto blockDurationSeconds = getSampleRate() > 0.0 ? static_cast<double>(buffer.getNumSamples()) / getSampleRate() : 0.0;
     const auto smoothingAlpha = (responseSeconds <= 0.0 || blockDurationSeconds <= 0.0)
@@ -872,17 +964,17 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
     for (int route = 1; route <= kNumModRoutes; ++route)
     {
         auto& routeState = routes[static_cast<size_t>(route - 1)];
-        const juce::String idx = juce::String(route);
-        routeState.enabled = parameters.getRawParameterValue("mod" + idx + "Enabled")->load() > 0.5f;
+        const auto routeIndex = static_cast<size_t>(route - 1);
+        routeState.enabled = paramCache.modEnabled[routeIndex] != nullptr && paramCache.modEnabled[routeIndex]->load() > 0.5f;
         if (!routeState.enabled)
         {
             continue;
         }
 
-        routeState.source = juce::jlimit(0, kNumModSources - 1, static_cast<int>(std::lround(parameters.getRawParameterValue("mod" + idx + "Source")->load())));
-        routeState.target = juce::jlimit(0, static_cast<int>(kModTargetParamIds.size()), static_cast<int>(std::lround(parameters.getRawParameterValue("mod" + idx + "Target")->load())));
-        routeState.amount = juce::jlimit(-1.0f, 1.0f, parameters.getRawParameterValue("mod" + idx + "Amount")->load());
-        routeState.bipolar = parameters.getRawParameterValue("mod" + idx + "Bipolar")->load() > 0.5f;
+        routeState.source = juce::jlimit(0, kNumModSources - 1, static_cast<int>(std::lround(paramCache.modSource[routeIndex]->load())));
+        routeState.target = juce::jlimit(0, static_cast<int>(kModTargetParamIds.size()), static_cast<int>(std::lround(paramCache.modTarget[routeIndex]->load())));
+        routeState.amount = juce::jlimit(-1.0f, 1.0f, paramCache.modAmount[routeIndex]->load());
+        routeState.bipolar = paramCache.modBipolar[routeIndex]->load() > 0.5f;
         routeState.usesRandomWave = routeState.source < kNumLfos
             && isRandomLfoWaveform(lfoWaveforms[static_cast<size_t>(routeState.source)]);
         routeState.usesPerVoiceVariation = routeState.usesRandomWave
@@ -913,19 +1005,13 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
         modulationDisplayValues[i].store(smoothedModulationSums[i]);
     }
 
-    const auto readParam = [this](const char* paramId, bool storeEffective)
+    const auto readParamByIndex = [this](int targetIndex, bool storeEffective)
     {
-        auto* param = parameters.getParameter(paramId);
-        auto* raw = parameters.getRawParameterValue(paramId);
+        auto* param = paramCache.modTargetParams[static_cast<size_t>(targetIndex)];
+        auto* raw = paramCache.modTargetRaw[static_cast<size_t>(targetIndex)];
         if (param == nullptr || raw == nullptr)
         {
             return 0.0f;
-        }
-
-        const auto targetIndex = modTargetIndexForParamId(paramId);
-        if (targetIndex < 0)
-        {
-            return raw->load();
         }
 
         const auto baseNorm = param->getValue();
@@ -939,53 +1025,55 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
         return actualValue;
     };
 
-    const auto attack = readParam("attack", true);
-    const auto decay = readParam("decay", true);
-    const auto sustain = readParam("sustain", true);
-    const auto release = readParam("release", true);
-    const auto envelopeMode = static_cast<EnvelopeMode>(juce::jlimit(0, 2, static_cast<int>(std::lround(parameters.getRawParameterValue("envType")->load()))));
-    const auto gainDb = readParam("gain", true);
-    const auto noteDriftAmount = readParam("noteDrift", true);
-    const auto liveNoteDriftHz = readParam("liveNoteDrift", true);
+    const auto attack = readParamByIndex(mtAttack, true);
+    const auto decay = readParamByIndex(mtDecay, true);
+    const auto sustain = readParamByIndex(mtSustain, true);
+    const auto release = readParamByIndex(mtRelease, true);
+    const auto envelopeMode = static_cast<EnvelopeMode>(juce::jlimit(0, 2, static_cast<int>(std::lround(loadValue(paramCache.envType, "envType")))));
+    const auto gainDb = readParamByIndex(mtGain, true);
+    const auto noteDriftAmount = readParamByIndex(mtNoteDrift, true);
+    const auto liveNoteDriftHz = readParamByIndex(mtLiveNoteDrift, true);
 
     ScannerParams scanner;
-    scanner.lineX1 = readParam("lineX1", true);
-    scanner.lineY1 = readParam("lineY1", true);
-    scanner.lineX2 = readParam("lineX2", true);
-    scanner.lineY2 = readParam("lineY2", true);
+    scanner.lineX1 = readParamByIndex(mtLineX1, true);
+    scanner.lineY1 = readParamByIndex(mtLineY1, true);
+    scanner.lineX2 = readParamByIndex(mtLineX2, true);
+    scanner.lineY2 = readParamByIndex(mtLineY2, true);
     scanner.scanResolution = juce::jlimit(0, static_cast<int>(kScanResolutionValues.size()) - 1,
-                                          static_cast<int>(std::lround(parameters.getRawParameterValue("scanResolution")->load())));
-    scanner.useSplineInterpolation = parameters.getRawParameterValue("scanSplineInterpolation")->load() > 0.5f;
-    scanner.mode = juce::jlimit(0, 4, static_cast<int>(std::lround(parameters.getRawParameterValue("scannerMode")->load())));
-    scanner.ovalX1 = readParam("ovalX1", true);
-    scanner.ovalY1 = readParam("ovalY1", true);
-    scanner.ovalX2 = readParam("ovalX2", true);
-    scanner.ovalY2 = readParam("ovalY2", true);
-    scanner.rectX = readParam("rectX", true);
-    scanner.rectY = readParam("rectY", true);
-    scanner.rectWidth = readParam("rectWidth", true);
-    scanner.rectHeight = readParam("rectHeight", true);
-    scanner.triX1 = readParam("triX1", true);
-    scanner.triY1 = readParam("triY1", true);
-    scanner.triX2 = readParam("triX2", true);
-    scanner.triY2 = readParam("triY2", true);
-    scanner.triX3 = readParam("triX3", true);
-    scanner.triY3 = readParam("triY3", true);
-    scanner.propX = readParam("propX", true);
-    scanner.propY = readParam("propY", true);
-    scanner.propSize = readParam("propSize", true);
-    scanner.propSpeed = readParam("propSpeed", true);
-    scanner.propSyncDivision = juce::jlimit(0, static_cast<int>(kSyncDivisionNames.size()) - 1, static_cast<int>(std::lround(parameters.getRawParameterValue("propSyncDivision")->load())));
-    scanner.propTempoSync = parameters.getRawParameterValue("propTempoSync")->load() > 0.5f;
-    const auto randomPhaseEnabled = parameters.getRawParameterValue("randomPhase")->load() > 0.5f;
-    scanner.mapRL = readParam("mapRL", true);
-    scanner.mapGL = readParam("mapGL", true);
-    scanner.mapBL = readParam("mapBL", true);
-    scanner.mapAL = readParam("mapAL", true);
-    scanner.mapRR = readParam("mapRR", true);
-    scanner.mapGR = readParam("mapGR", true);
-    scanner.mapBR = readParam("mapBR", true);
-    scanner.mapAR = readParam("mapAR", true);
+                                          static_cast<int>(std::lround(loadValue(paramCache.scanResolution, "scanResolution"))));
+    scanner.useSplineInterpolation = loadValue(paramCache.scanSplineInterpolation, "scanSplineInterpolation") > 0.5f;
+    scanner.mode = juce::jlimit(0, 4, static_cast<int>(std::lround(loadValue(paramCache.scannerMode, "scannerMode"))));
+    scanner.ovalX1 = readParamByIndex(mtOvalX1, true);
+    scanner.ovalY1 = readParamByIndex(mtOvalY1, true);
+    scanner.ovalX2 = readParamByIndex(mtOvalX2, true);
+    scanner.ovalY2 = readParamByIndex(mtOvalY2, true);
+    scanner.ovalRotation = readParamByIndex(mtOvalRotation, true);
+    scanner.rectX = readParamByIndex(mtRectX, true);
+    scanner.rectY = readParamByIndex(mtRectY, true);
+    scanner.rectWidth = readParamByIndex(mtRectWidth, true);
+    scanner.rectHeight = readParamByIndex(mtRectHeight, true);
+    scanner.rectRotation = readParamByIndex(mtRectRotation, true);
+    scanner.triX1 = readParamByIndex(mtTriX1, true);
+    scanner.triY1 = readParamByIndex(mtTriY1, true);
+    scanner.triX2 = readParamByIndex(mtTriX2, true);
+    scanner.triY2 = readParamByIndex(mtTriY2, true);
+    scanner.triX3 = readParamByIndex(mtTriX3, true);
+    scanner.triY3 = readParamByIndex(mtTriY3, true);
+    scanner.propX = readParamByIndex(mtPropX, true);
+    scanner.propY = readParamByIndex(mtPropY, true);
+    scanner.propSize = readParamByIndex(mtPropSize, true);
+    scanner.propSpeed = readParamByIndex(mtPropSpeed, true);
+    scanner.propSyncDivision = juce::jlimit(0, static_cast<int>(kSyncDivisionNames.size()) - 1, static_cast<int>(std::lround(loadValue(paramCache.propSyncDivision, "propSyncDivision"))));
+    scanner.propTempoSync = loadValue(paramCache.propTempoSync, "propTempoSync") > 0.5f;
+    const auto randomPhaseEnabled = loadValue(paramCache.randomPhase, "randomPhase") > 0.5f;
+    scanner.mapRL = readParamByIndex(mtMapRL, true);
+    scanner.mapGL = readParamByIndex(mtMapGL, true);
+    scanner.mapBL = readParamByIndex(mtMapBL, true);
+    scanner.mapAL = readParamByIndex(mtMapAL, true);
+    scanner.mapRR = readParamByIndex(mtMapRR, true);
+    scanner.mapGR = readParamByIndex(mtMapGR, true);
+    scanner.mapBR = readParamByIndex(mtMapBR, true);
+    scanner.mapAR = readParamByIndex(mtMapAR, true);
 
     if (scanner.mode == 4)
     {
@@ -1072,7 +1160,7 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
         for (size_t targetIndex = 0; targetIndex < kModTargetParamIds.size(); ++targetIndex)
         {
             modulationDisplayValues[targetIndex].store(smoothedPreviewModulationSums[targetIndex]);
-            auto* param = parameters.getParameter(kModTargetParamIds[targetIndex]);
+            auto* param = paramCache.modTargetParams[targetIndex];
             if (param != nullptr)
             {
                 const auto actualValue = param->convertFrom0to1(
@@ -1087,47 +1175,46 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
     if (usePerVoiceScannerState)
     {
         auto previewScanner = scanner;
-        const auto readPreviewParam = [this](const char* paramId, float fallbackValue)
+        const auto readPreviewParam = [this](int targetIndex, float fallbackValue)
         {
-            const auto index = modTargetIndexForParamId(paramId);
-            if (index < 0)
+            if (targetIndex < 0 || targetIndex >= static_cast<int>(kNumModTargets))
             {
                 return fallbackValue;
             }
 
-            return effectiveDisplayValues[static_cast<size_t>(index)].load();
+            return effectiveDisplayValues[static_cast<size_t>(targetIndex)].load();
         };
 
-        previewScanner.lineX1 = readPreviewParam("lineX1", previewScanner.lineX1);
-        previewScanner.lineY1 = readPreviewParam("lineY1", previewScanner.lineY1);
-        previewScanner.lineX2 = readPreviewParam("lineX2", previewScanner.lineX2);
-        previewScanner.lineY2 = readPreviewParam("lineY2", previewScanner.lineY2);
-        previewScanner.ovalX1 = readPreviewParam("ovalX1", previewScanner.ovalX1);
-        previewScanner.ovalY1 = readPreviewParam("ovalY1", previewScanner.ovalY1);
-        previewScanner.ovalX2 = readPreviewParam("ovalX2", previewScanner.ovalX2);
-        previewScanner.ovalY2 = readPreviewParam("ovalY2", previewScanner.ovalY2);
-        previewScanner.rectX = readPreviewParam("rectX", previewScanner.rectX);
-        previewScanner.rectY = readPreviewParam("rectY", previewScanner.rectY);
-        previewScanner.rectWidth = readPreviewParam("rectWidth", previewScanner.rectWidth);
-        previewScanner.rectHeight = readPreviewParam("rectHeight", previewScanner.rectHeight);
-        previewScanner.triX1 = readPreviewParam("triX1", previewScanner.triX1);
-        previewScanner.triY1 = readPreviewParam("triY1", previewScanner.triY1);
-        previewScanner.triX2 = readPreviewParam("triX2", previewScanner.triX2);
-        previewScanner.triY2 = readPreviewParam("triY2", previewScanner.triY2);
-        previewScanner.triX3 = readPreviewParam("triX3", previewScanner.triX3);
-        previewScanner.triY3 = readPreviewParam("triY3", previewScanner.triY3);
-        previewScanner.propX = readPreviewParam("propX", previewScanner.propX);
-        previewScanner.propY = readPreviewParam("propY", previewScanner.propY);
-        previewScanner.propSize = readPreviewParam("propSize", previewScanner.propSize);
-        previewScanner.propSpeed = readPreviewParam("propSpeed", previewScanner.propSpeed);
-        previewScanner.mapRL = readPreviewParam("mapRL", previewScanner.mapRL);
-        previewScanner.mapGL = readPreviewParam("mapGL", previewScanner.mapGL);
-        previewScanner.mapBL = readPreviewParam("mapBL", previewScanner.mapBL);
-        previewScanner.mapAL = readPreviewParam("mapAL", previewScanner.mapAL);
-        previewScanner.mapRR = readPreviewParam("mapRR", previewScanner.mapRR);
-        previewScanner.mapGR = readPreviewParam("mapGR", previewScanner.mapGR);
-        previewScanner.mapBR = readPreviewParam("mapBR", previewScanner.mapBR);
-        previewScanner.mapAR = readPreviewParam("mapAR", previewScanner.mapAR);
+        previewScanner.lineX1 = readPreviewParam(mtLineX1, previewScanner.lineX1);
+        previewScanner.lineY1 = readPreviewParam(mtLineY1, previewScanner.lineY1);
+        previewScanner.lineX2 = readPreviewParam(mtLineX2, previewScanner.lineX2);
+        previewScanner.lineY2 = readPreviewParam(mtLineY2, previewScanner.lineY2);
+        previewScanner.ovalX1 = readPreviewParam(mtOvalX1, previewScanner.ovalX1);
+        previewScanner.ovalY1 = readPreviewParam(mtOvalY1, previewScanner.ovalY1);
+        previewScanner.ovalX2 = readPreviewParam(mtOvalX2, previewScanner.ovalX2);
+        previewScanner.ovalY2 = readPreviewParam(mtOvalY2, previewScanner.ovalY2);
+        previewScanner.rectX = readPreviewParam(mtRectX, previewScanner.rectX);
+        previewScanner.rectY = readPreviewParam(mtRectY, previewScanner.rectY);
+        previewScanner.rectWidth = readPreviewParam(mtRectWidth, previewScanner.rectWidth);
+        previewScanner.rectHeight = readPreviewParam(mtRectHeight, previewScanner.rectHeight);
+        previewScanner.triX1 = readPreviewParam(mtTriX1, previewScanner.triX1);
+        previewScanner.triY1 = readPreviewParam(mtTriY1, previewScanner.triY1);
+        previewScanner.triX2 = readPreviewParam(mtTriX2, previewScanner.triX2);
+        previewScanner.triY2 = readPreviewParam(mtTriY2, previewScanner.triY2);
+        previewScanner.triX3 = readPreviewParam(mtTriX3, previewScanner.triX3);
+        previewScanner.triY3 = readPreviewParam(mtTriY3, previewScanner.triY3);
+        previewScanner.propX = readPreviewParam(mtPropX, previewScanner.propX);
+        previewScanner.propY = readPreviewParam(mtPropY, previewScanner.propY);
+        previewScanner.propSize = readPreviewParam(mtPropSize, previewScanner.propSize);
+        previewScanner.propSpeed = readPreviewParam(mtPropSpeed, previewScanner.propSpeed);
+        previewScanner.mapRL = readPreviewParam(mtMapRL, previewScanner.mapRL);
+        previewScanner.mapGL = readPreviewParam(mtMapGL, previewScanner.mapGL);
+        previewScanner.mapBL = readPreviewParam(mtMapBL, previewScanner.mapBL);
+        previewScanner.mapAL = readPreviewParam(mtMapAL, previewScanner.mapAL);
+        previewScanner.mapRR = readPreviewParam(mtMapRR, previewScanner.mapRR);
+        previewScanner.mapGR = readPreviewParam(mtMapGR, previewScanner.mapGR);
+        previewScanner.mapBR = readPreviewParam(mtMapBR, previewScanner.mapBR);
+        previewScanner.mapAR = readPreviewParam(mtMapAR, previewScanner.mapAR);
 
         WaveTable previewLeft{};
         WaveTable previewRight{};
@@ -1215,19 +1302,13 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
                 }
             }
 
-            const auto readVoiceParam = [this, &voiceModulationSums](const char* paramId)
+            const auto readVoiceParam = [this, &voiceModulationSums](int targetIndex)
             {
-                auto* param = parameters.getParameter(paramId);
-                auto* raw = parameters.getRawParameterValue(paramId);
+                auto* param = paramCache.modTargetParams[static_cast<size_t>(targetIndex)];
+                auto* raw = paramCache.modTargetRaw[static_cast<size_t>(targetIndex)];
                 if (param == nullptr || raw == nullptr)
                 {
                     return 0.0f;
-                }
-
-                const auto targetIndex = modTargetIndexForParamId(paramId);
-                if (targetIndex < 0)
-                {
-                    return raw->load();
                 }
 
                 const auto baseNorm = param->getValue();
@@ -1236,16 +1317,16 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
             };
 
             const auto useVoiceModulation = hasPerVoiceVariableRoutes && voiceIsActive;
-            const auto voiceAttack = useVoiceModulation ? readVoiceParam("attack") : attack;
-            const auto voiceDecay = useVoiceModulation ? readVoiceParam("decay") : decay;
-            const auto voiceSustain = useVoiceModulation ? readVoiceParam("sustain") : sustain;
-            const auto voiceNoteDrift = useVoiceModulation ? readVoiceParam("noteDrift") : noteDriftAmount;
-            const auto voiceLiveNoteDrift = useVoiceModulation ? readVoiceParam("liveNoteDrift") : liveNoteDriftHz;
+            const auto voiceAttack = useVoiceModulation ? readVoiceParam(mtAttack) : attack;
+            const auto voiceDecay = useVoiceModulation ? readVoiceParam(mtDecay) : decay;
+            const auto voiceSustain = useVoiceModulation ? readVoiceParam(mtSustain) : sustain;
+            const auto voiceNoteDrift = useVoiceModulation ? readVoiceParam(mtNoteDrift) : noteDriftAmount;
+            const auto voiceLiveNoteDrift = useVoiceModulation ? readVoiceParam(mtLiveNoteDrift) : liveNoteDriftHz;
 
             voice->updateAdsr(voiceAttack,
                               voiceDecay,
                               voiceSustain,
-                              useVoiceModulation ? readVoiceParam("release") : release,
+                              useVoiceModulation ? readVoiceParam(mtRelease) : release,
                               envelopeMode);
             voice->setNoteDriftAmount(voiceNoteDrift);
             voice->setLiveNoteDriftRateHz(voiceLiveNoteDrift);
@@ -1269,36 +1350,36 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
                 auto voiceScanner = scanner;
                 if (hasPerVoiceVariableScannerRoutes)
                 {
-                    voiceScanner.lineX1 = readVoiceParam("lineX1");
-                    voiceScanner.lineY1 = readVoiceParam("lineY1");
-                    voiceScanner.lineX2 = readVoiceParam("lineX2");
-                    voiceScanner.lineY2 = readVoiceParam("lineY2");
-                    voiceScanner.ovalX1 = readVoiceParam("ovalX1");
-                    voiceScanner.ovalY1 = readVoiceParam("ovalY1");
-                    voiceScanner.ovalX2 = readVoiceParam("ovalX2");
-                    voiceScanner.ovalY2 = readVoiceParam("ovalY2");
-                    voiceScanner.rectX = readVoiceParam("rectX");
-                    voiceScanner.rectY = readVoiceParam("rectY");
-                    voiceScanner.rectWidth = readVoiceParam("rectWidth");
-                    voiceScanner.rectHeight = readVoiceParam("rectHeight");
-                    voiceScanner.triX1 = readVoiceParam("triX1");
-                    voiceScanner.triY1 = readVoiceParam("triY1");
-                    voiceScanner.triX2 = readVoiceParam("triX2");
-                    voiceScanner.triY2 = readVoiceParam("triY2");
-                    voiceScanner.triX3 = readVoiceParam("triX3");
-                    voiceScanner.triY3 = readVoiceParam("triY3");
-                    voiceScanner.propX = readVoiceParam("propX");
-                    voiceScanner.propY = readVoiceParam("propY");
-                    voiceScanner.propSize = readVoiceParam("propSize");
-                    voiceScanner.propSpeed = readVoiceParam("propSpeed");
-                    voiceScanner.mapRL = readVoiceParam("mapRL");
-                    voiceScanner.mapGL = readVoiceParam("mapGL");
-                    voiceScanner.mapBL = readVoiceParam("mapBL");
-                    voiceScanner.mapAL = readVoiceParam("mapAL");
-                    voiceScanner.mapRR = readVoiceParam("mapRR");
-                    voiceScanner.mapGR = readVoiceParam("mapGR");
-                    voiceScanner.mapBR = readVoiceParam("mapBR");
-                    voiceScanner.mapAR = readVoiceParam("mapAR");
+                    voiceScanner.lineX1 = readVoiceParam(mtLineX1);
+                    voiceScanner.lineY1 = readVoiceParam(mtLineY1);
+                    voiceScanner.lineX2 = readVoiceParam(mtLineX2);
+                    voiceScanner.lineY2 = readVoiceParam(mtLineY2);
+                    voiceScanner.ovalX1 = readVoiceParam(mtOvalX1);
+                    voiceScanner.ovalY1 = readVoiceParam(mtOvalY1);
+                    voiceScanner.ovalX2 = readVoiceParam(mtOvalX2);
+                    voiceScanner.ovalY2 = readVoiceParam(mtOvalY2);
+                    voiceScanner.rectX = readVoiceParam(mtRectX);
+                    voiceScanner.rectY = readVoiceParam(mtRectY);
+                    voiceScanner.rectWidth = readVoiceParam(mtRectWidth);
+                    voiceScanner.rectHeight = readVoiceParam(mtRectHeight);
+                    voiceScanner.triX1 = readVoiceParam(mtTriX1);
+                    voiceScanner.triY1 = readVoiceParam(mtTriY1);
+                    voiceScanner.triX2 = readVoiceParam(mtTriX2);
+                    voiceScanner.triY2 = readVoiceParam(mtTriY2);
+                    voiceScanner.triX3 = readVoiceParam(mtTriX3);
+                    voiceScanner.triY3 = readVoiceParam(mtTriY3);
+                    voiceScanner.propX = readVoiceParam(mtPropX);
+                    voiceScanner.propY = readVoiceParam(mtPropY);
+                    voiceScanner.propSize = readVoiceParam(mtPropSize);
+                    voiceScanner.propSpeed = readVoiceParam(mtPropSpeed);
+                    voiceScanner.mapRL = readVoiceParam(mtMapRL);
+                    voiceScanner.mapGL = readVoiceParam(mtMapGL);
+                    voiceScanner.mapBL = readVoiceParam(mtMapBL);
+                    voiceScanner.mapAL = readVoiceParam(mtMapAL);
+                    voiceScanner.mapRR = readVoiceParam(mtMapRR);
+                    voiceScanner.mapGR = readVoiceParam(mtMapGR);
+                    voiceScanner.mapBR = readVoiceParam(mtMapBR);
+                    voiceScanner.mapAR = readVoiceParam(mtMapAR);
                 }
 
                 const auto phaseValue = basePropellorPhase + voice->getPropellorPhaseOffset();
@@ -1599,6 +1680,8 @@ PictureWaveSynthAudioProcessor::ParameterLayout PictureWaveSynthAudioProcessor::
         "ovalX2", "Oval X2", juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.7f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         "ovalY2", "Oval Y2", juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.7f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        "ovalRotation", "Oval Rot", juce::NormalisableRange<float>(-180.0f, 180.0f, 0.1f), 0.0f));
 
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         "rectX", "Rect X", juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.2f));
@@ -1608,6 +1691,8 @@ PictureWaveSynthAudioProcessor::ParameterLayout PictureWaveSynthAudioProcessor::
         "rectWidth", "Rect Width", juce::NormalisableRange<float>(0.05f, 1.5f, 0.001f), 0.4f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         "rectHeight", "Rect Height", juce::NormalisableRange<float>(0.05f, 1.5f, 0.001f), 0.3f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        "rectRotation", "Rect Rot", juce::NormalisableRange<float>(-180.0f, 180.0f, 0.1f), 0.0f));
 
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         "triX1", "Triangle X1", juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.25f));
@@ -1816,22 +1901,22 @@ float PictureWaveSynthAudioProcessor::getEffectiveParameterValue(const char* par
 PictureWaveSynthAudioProcessor::FxFilterSettings PictureWaveSynthAudioProcessor::getFxFilterSettings() const
 {
     FxFilterSettings settings;
-    settings.type = static_cast<int>(std::lround(parameters.getRawParameterValue("fxFilterType")->load()));
-    settings.cutoffHz = parameters.getRawParameterValue("fxFilterCutoff")->load();
-    settings.resonance = parameters.getRawParameterValue("fxFilterResonance")->load();
-    settings.gainDecibels = parameters.getRawParameterValue("fxFilterGain")->load();
+    settings.type = static_cast<int>(std::lround(paramCache.fxFilterType != nullptr ? paramCache.fxFilterType->load() : 0.0f));
+    settings.cutoffHz = paramCache.fxFilterCutoff != nullptr ? paramCache.fxFilterCutoff->load() : 1200.0f;
+    settings.resonance = paramCache.fxFilterResonance != nullptr ? paramCache.fxFilterResonance->load() : 0.707f;
+    settings.gainDecibels = paramCache.fxFilterGain != nullptr ? paramCache.fxFilterGain->load() : 0.0f;
     return settings;
 }
 
 PictureWaveSynthAudioProcessor::ReverbSettings PictureWaveSynthAudioProcessor::getReverbSettings() const
 {
     ReverbSettings settings;
-    settings.roomSize = parameters.getRawParameterValue("reverbRoomSize")->load();
-    settings.damping = parameters.getRawParameterValue("reverbDamping")->load();
-    settings.width = parameters.getRawParameterValue("reverbWidth")->load();
-    settings.wetLevel = parameters.getRawParameterValue("reverbWet")->load();
-    settings.dryLevel = parameters.getRawParameterValue("reverbDry")->load();
-    settings.freezeMode = parameters.getRawParameterValue("reverbFreeze")->load();
+    settings.roomSize = paramCache.reverbRoomSize != nullptr ? paramCache.reverbRoomSize->load() : 0.35f;
+    settings.damping = paramCache.reverbDamping != nullptr ? paramCache.reverbDamping->load() : 0.5f;
+    settings.width = paramCache.reverbWidth != nullptr ? paramCache.reverbWidth->load() : 1.0f;
+    settings.wetLevel = paramCache.reverbWet != nullptr ? paramCache.reverbWet->load() : 0.0f;
+    settings.dryLevel = paramCache.reverbDry != nullptr ? paramCache.reverbDry->load() : 1.0f;
+    settings.freezeMode = paramCache.reverbFreeze != nullptr ? paramCache.reverbFreeze->load() : 0.0f;
     return settings;
 }
 
@@ -1905,27 +1990,109 @@ void PictureWaveSynthAudioProcessor::updateWaveTablePreview(const float* left, c
     std::copy(right, right + kWaveTableSize, previewWaveTableRight.begin());
 }
 
+void PictureWaveSynthAudioProcessor::cacheParameterPointers()
+{
+    const auto cacheRaw = [this](const juce::String& id) -> std::atomic<float>*
+    {
+        return parameters.getRawParameterValue(id);
+    };
+
+    paramCache.maxVoices = cacheRaw("maxVoices");
+    paramCache.modResponseMs = cacheRaw("modResponseMs");
+    paramCache.envType = cacheRaw("envType");
+    paramCache.scanResolution = cacheRaw("scanResolution");
+    paramCache.scanSplineInterpolation = cacheRaw("scanSplineInterpolation");
+    paramCache.scannerMode = cacheRaw("scannerMode");
+    paramCache.propSyncDivision = cacheRaw("propSyncDivision");
+    paramCache.propTempoSync = cacheRaw("propTempoSync");
+    paramCache.randomPhase = cacheRaw("randomPhase");
+
+    paramCache.fxFilterType = cacheRaw("fxFilterType");
+    paramCache.fxFilterCutoff = cacheRaw("fxFilterCutoff");
+    paramCache.fxFilterResonance = cacheRaw("fxFilterResonance");
+    paramCache.fxFilterGain = cacheRaw("fxFilterGain");
+
+    paramCache.reverbRoomSize = cacheRaw("reverbRoomSize");
+    paramCache.reverbDamping = cacheRaw("reverbDamping");
+    paramCache.reverbWidth = cacheRaw("reverbWidth");
+    paramCache.reverbWet = cacheRaw("reverbWet");
+    paramCache.reverbDry = cacheRaw("reverbDry");
+    paramCache.reverbFreeze = cacheRaw("reverbFreeze");
+
+    for (int i = 0; i < kNumLfos; ++i)
+    {
+        const auto idx = juce::String(i + 1);
+        paramCache.lfoRate[static_cast<size_t>(i)] = cacheRaw("lfo" + idx + "Rate");
+        paramCache.lfoDepth[static_cast<size_t>(i)] = cacheRaw("lfo" + idx + "Depth");
+        paramCache.lfoWave[static_cast<size_t>(i)] = cacheRaw("lfo" + idx + "Wave");
+        paramCache.lfoSync[static_cast<size_t>(i)] = cacheRaw("lfo" + idx + "Sync");
+        paramCache.lfoDivision[static_cast<size_t>(i)] = cacheRaw("lfo" + idx + "Division");
+        paramCache.lfoRandomPhasePerVoice[static_cast<size_t>(i)] = cacheRaw("lfo" + idx + "RandomPhasePerVoice");
+    }
+
+    for (int i = 0; i < kNumModRoutes; ++i)
+    {
+        const auto idx = juce::String(i + 1);
+        paramCache.modEnabled[static_cast<size_t>(i)] = cacheRaw("mod" + idx + "Enabled");
+        paramCache.modSource[static_cast<size_t>(i)] = cacheRaw("mod" + idx + "Source");
+        paramCache.modTarget[static_cast<size_t>(i)] = cacheRaw("mod" + idx + "Target");
+        paramCache.modAmount[static_cast<size_t>(i)] = cacheRaw("mod" + idx + "Amount");
+        paramCache.modBipolar[static_cast<size_t>(i)] = cacheRaw("mod" + idx + "Bipolar");
+    }
+
+    for (size_t i = 0; i < kModTargetParamIds.size(); ++i)
+    {
+        paramCache.modTargetParams[i] = parameters.getParameter(kModTargetParamIds[i]);
+        paramCache.modTargetRaw[i] = parameters.getRawParameterValue(kModTargetParamIds[i]);
+    }
+}
+
 void PictureWaveSynthAudioProcessor::updateDcBlocker()
 {
-    const auto coefficients = createDcBlockerCoefficients(getSampleRate() > 0.0 ? getSampleRate() : 44100.0);
+    const auto sampleRate = getSampleRate() > 0.0 ? getSampleRate() : 44100.0;
+    if (hasLastDcSampleRate && juce::approximatelyEqual(sampleRate, lastDcSampleRate))
+    {
+        return;
+    }
+
+    const auto coefficients = createDcBlockerCoefficients(sampleRate);
     if (coefficients != nullptr)
     {
         *dcBlocker.state = *coefficients;
+        lastDcSampleRate = sampleRate;
+        hasLastDcSampleRate = true;
     }
 }
 
 void PictureWaveSynthAudioProcessor::updateFxFilter()
 {
-    const auto coefficients = createFxFilterCoefficients(getFxFilterSettings(), getSampleRate() > 0.0 ? getSampleRate() : 44100.0);
+    const auto sampleRate = getSampleRate() > 0.0 ? getSampleRate() : 44100.0;
+    const auto settings = getFxFilterSettings();
+    if (hasLastFxSettings
+        && juce::approximatelyEqual(sampleRate, lastFxSampleRate)
+        && fxSettingsEqual(settings, lastFxSettings))
+    {
+        return;
+    }
+
+    const auto coefficients = createFxFilterCoefficients(settings, sampleRate);
     if (coefficients != nullptr)
     {
         *fxFilter.state = *coefficients;
+        lastFxSettings = settings;
+        lastFxSampleRate = sampleRate;
+        hasLastFxSettings = true;
     }
 }
 
 void PictureWaveSynthAudioProcessor::updateReverb()
 {
     const auto settings = getReverbSettings();
+    if (hasLastReverbSettings && reverbSettingsEqual(settings, lastReverbSettings))
+    {
+        return;
+    }
+
     juce::Reverb::Parameters params;
     params.roomSize = settings.roomSize;
     params.damping = settings.damping;
@@ -1934,6 +2101,8 @@ void PictureWaveSynthAudioProcessor::updateReverb()
     params.dryLevel = settings.dryLevel;
     params.freezeMode = settings.freezeMode;
     reverb.setParameters(params);
+    lastReverbSettings = settings;
+    hasLastReverbSettings = true;
 }
 
 void PictureWaveSynthAudioProcessor::regenerateWaveTablesIfNeeded(const ScannerParams& scanner)
@@ -2095,8 +2264,14 @@ std::array<float, 2> PictureWaveSynthAudioProcessor::sampleScannerPoint(const Sc
         const auto rx = juce::jmax(0.0001f, 0.5f * (maxX - minX));
         const auto ry = juce::jmax(0.0001f, 0.5f * (maxY - minY));
         const auto theta = juce::MathConstants<float>::twoPi * tt;
+        const auto rotationRadians = juce::degreesToRadians(scanner.ovalRotation);
 
-        return { cx + rx * std::cos(theta), cy + ry * std::sin(theta) };
+        return rotatePointAroundCenter(
+            cx + rx * std::cos(theta),
+            cy + ry * std::sin(theta),
+            cx,
+            cy,
+            rotationRadians);
     }
 
     if (scanner.mode == 2)
@@ -2111,21 +2286,31 @@ std::array<float, 2> PictureWaveSynthAudioProcessor::sampleScannerPoint(const Sc
         const auto y0 = cy - halfH;
         const auto y1 = cy + halfH;
 
+        std::array<float, 2> point{};
         const auto edgeT = tt * 4.0f;
         if (edgeT < 1.0f)
         {
-            return { linearInterpolate(x0, x1, edgeT), y0 };
+            point = { linearInterpolate(x0, x1, edgeT), y0 };
         }
-        if (edgeT < 2.0f)
+        else if (edgeT < 2.0f)
         {
-            return { x1, linearInterpolate(y0, y1, edgeT - 1.0f) };
+            point = { x1, linearInterpolate(y0, y1, edgeT - 1.0f) };
         }
-        if (edgeT < 3.0f)
+        else if (edgeT < 3.0f)
         {
-            return { linearInterpolate(x1, x0, edgeT - 2.0f), y1 };
+            point = { linearInterpolate(x1, x0, edgeT - 2.0f), y1 };
+        }
+        else
+        {
+            point = { x0, linearInterpolate(y1, y0, edgeT - 3.0f) };
         }
 
-        return { x0, linearInterpolate(y1, y0, edgeT - 3.0f) };
+        return rotatePointAroundCenter(
+            point[0],
+            point[1],
+            cx,
+            cy,
+            juce::degreesToRadians(scanner.rectRotation));
     }
 
     if (scanner.mode == 3)
@@ -2214,10 +2399,12 @@ bool PictureWaveSynthAudioProcessor::scannerParamsEqual(const ScannerParams& a, 
         && juce::approximatelyEqual(a.ovalY1, b.ovalY1)
         && juce::approximatelyEqual(a.ovalX2, b.ovalX2)
         && juce::approximatelyEqual(a.ovalY2, b.ovalY2)
+        && juce::approximatelyEqual(a.ovalRotation, b.ovalRotation)
         && juce::approximatelyEqual(a.rectX, b.rectX)
         && juce::approximatelyEqual(a.rectY, b.rectY)
         && juce::approximatelyEqual(a.rectWidth, b.rectWidth)
         && juce::approximatelyEqual(a.rectHeight, b.rectHeight)
+        && juce::approximatelyEqual(a.rectRotation, b.rectRotation)
         && juce::approximatelyEqual(a.triX1, b.triX1)
         && juce::approximatelyEqual(a.triY1, b.triY1)
         && juce::approximatelyEqual(a.triX2, b.triX2)

@@ -38,10 +38,12 @@ private:
             float ovalY1,
             float ovalX2,
             float ovalY2,
+            float ovalRotation,
             float rectX,
             float rectY,
             float rectWidth,
             float rectHeight,
+            float rectRotation,
             float triX1,
             float triY1,
             float triX2,
@@ -99,10 +101,12 @@ private:
         float ovalY1 = 0.3f;
         float ovalX2 = 0.7f;
         float ovalY2 = 0.7f;
+        float ovalRotation = 0.0f;
         float rectX = 0.2f;
         float rectY = 0.2f;
         float rectWidth = 0.4f;
         float rectHeight = 0.3f;
+        float rectRotation = 0.0f;
         float triX1 = 0.25f;
         float triY1 = 0.2f;
         float triX2 = 0.75f;
@@ -124,6 +128,7 @@ private:
         void setOverlayAccentColour(juce::Colour newColour) { overlayAccentColour = newColour; }
         void paintOverChildren(juce::Graphics& g) override;
         void mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel) override;
+        void mouseDrag(const juce::MouseEvent& event) override;
 
     private:
         float modulationAmount = 0.0f;
@@ -183,6 +188,7 @@ private:
     private:
         void mouseDoubleClick(const juce::MouseEvent& event) override;
         int resetSelectedId = 0;
+        double lastWheelStepMs = 0.0;
     };
 
     class ResettableToggleButton final : public juce::ToggleButton

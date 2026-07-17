@@ -181,12 +181,12 @@ juce::Colour getLfoContentBackgroundForIndex(int tabIndex)
         .withAlpha(0.95f);
 }
 
-constexpr std::array<const char*, 38> kModTargetNames{
+constexpr std::array<const char*, 40> kModTargetNames{
     "None",
     "Attack", "Decay", "Sustain", "Release", "Gain", "Note Drift", "Drift Freq",
     "Line X1", "Line Y1", "Line X2", "Line Y2",
-    "Oval X1", "Oval Y1", "Oval X2", "Oval Y2",
-    "Rect X", "Rect Y", "Rect Width", "Rect Height",
+    "Oval X1", "Oval Y1", "Oval X2", "Oval Y2", "Oval Rot",
+    "Rect X", "Rect Y", "Rect Width", "Rect Height", "Rect Rot",
     "Tri X1", "Tri Y1", "Tri X2", "Tri Y2", "Tri X3", "Tri Y3",
     "Prop X", "Prop Y", "Prop Size", "Prop Speed",
     "R->L", "G->L", "B->L", "A->L", "R->R", "G->R", "B->R", "A->R"
@@ -196,6 +196,9 @@ float clampParameterValue(const juce::String& paramId, float value)
 {
     if (paramId == "rectWidth" || paramId == "rectHeight" || paramId == "propSize")
         return juce::jlimit(0.05f, 1.5f, value);
+
+    if (paramId == "ovalRotation" || paramId == "rectRotation")
+        return juce::jlimit(-180.0f, 180.0f, value);
 
     if (paramId == "propSpeed")
         return juce::jlimit(0.0f, 10.0f, value);
@@ -213,6 +216,18 @@ juce::String syncDivisionTextFromIndex(int division)
 {
     const auto clamped = static_cast<size_t>(juce::jlimit(0, static_cast<int>(kSyncDivisionNames.size()) - 1, division));
     return kSyncDivisionNames[clamped];
+}
+
+juce::Point<float> rotatePoint(juce::Point<float> point, juce::Point<float> center, float angleRadians)
+{
+    const auto dx = point.x - center.x;
+    const auto dy = point.y - center.y;
+    const auto cosA = std::cos(angleRadians);
+    const auto sinA = std::sin(angleRadians);
+    return {
+        center.x + dx * cosA - dy * sinA,
+        center.y + dx * sinA + dy * cosA
+    };
 }
 }
 
@@ -351,6 +366,29 @@ void PictureWaveSynthAudioProcessorEditor::ModulationSlider::mouseWheelMove(cons
     const auto direction = axis > 0.0f ? 1.0 : -1.0;
     const auto nextValue = juce::jlimit(getMinimum(), getMaximum(), getValue() + direction * step);
     setValue(nextValue, juce::sendNotificationSync);
+}
+
+void PictureWaveSynthAudioProcessorEditor::ModulationSlider::mouseDrag(const juce::MouseEvent& event)
+{
+    juce::Slider::mouseDrag(event);
+
+    if (!event.mods.isShiftDown())
+    {
+        return;
+    }
+
+    const auto sliderName = getName();
+    if (sliderName != "Oval Rot" && sliderName != "Rect Rot")
+    {
+        return;
+    }
+
+    constexpr double snapStepDegrees = 15.0;
+    const auto snapped = juce::jlimit(getMinimum(), getMaximum(), std::round(getValue() / snapStepDegrees) * snapStepDegrees);
+    if (!juce::approximatelyEqual(static_cast<float>(snapped), static_cast<float>(getValue())))
+    {
+        setValue(snapped, juce::sendNotificationSync);
+    }
 }
 
 void PictureWaveSynthAudioProcessorEditor::LfoVisualizer::setVisualState(float newPhase, float newDepth, int newWave, juce::Colour newAccent)
@@ -611,11 +649,23 @@ void PictureWaveSynthAudioProcessorEditor::ResettableComboBox::mouseWheelMove(co
 {
     juce::ignoreUnused(event);
 
+    if (wheel.isInertial)
+    {
+        return;
+    }
+
     const auto axis = std::abs(wheel.deltaY) > 0.0f ? wheel.deltaY : wheel.deltaX;
     if (axis == 0.0f || getNumItems() <= 0)
     {
         return;
     }
+
+    const auto nowMs = juce::Time::getMillisecondCounterHiRes();
+    if ((nowMs - lastWheelStepMs) < 80.0)
+    {
+        return;
+    }
+    lastWheelStepMs = nowMs;
 
     auto currentIndex = getSelectedItemIndex();
     if (currentIndex < 0)
@@ -663,10 +713,12 @@ void PictureWaveSynthAudioProcessorEditor::ImagePreviewComponent::setScanner(
     float newOvalY1,
     float newOvalX2,
     float newOvalY2,
+    float newOvalRotation,
     float newRectX,
     float newRectY,
     float newRectWidth,
     float newRectHeight,
+    float newRectRotation,
     float newTriX1,
     float newTriY1,
     float newTriX2,
@@ -687,10 +739,12 @@ void PictureWaveSynthAudioProcessorEditor::ImagePreviewComponent::setScanner(
     ovalY1 = newOvalY1;
     ovalX2 = newOvalX2;
     ovalY2 = newOvalY2;
+    ovalRotation = newOvalRotation;
     rectX = newRectX;
     rectY = newRectY;
     rectWidth = newRectWidth;
     rectHeight = newRectHeight;
+    rectRotation = newRectRotation;
     triX1 = newTriX1;
     triY1 = newTriY1;
     triX2 = newTriX2;
@@ -1107,7 +1161,11 @@ void PictureWaveSynthAudioProcessorEditor::ImagePreviewComponent::paint(juce::Gr
         const auto pw = (maxX - minX) * drawArea.getWidth();
         const auto ph = (maxY - minY) * drawArea.getHeight();
 
-        g.drawEllipse(px, py, pw, ph, 2.2f);
+        juce::Path ovalPath;
+        ovalPath.addEllipse(px, py, pw, ph);
+        const auto center = juce::Point<float>(px + pw * 0.5f, py + ph * 0.5f);
+        ovalPath.applyTransform(juce::AffineTransform::rotation(juce::degreesToRadians(ovalRotation), center.x, center.y));
+        g.strokePath(ovalPath, juce::PathStrokeType(2.2f));
         g.fillEllipse((px + pw * 0.5f) - 4.0f, (py + ph * 0.5f) - 4.0f, 8.0f, 8.0f);
         const auto p1 = normalisedToPoint(ovalX1, ovalY1);
         const auto p2 = normalisedToPoint(ovalX2, ovalY2);
@@ -1123,7 +1181,22 @@ void PictureWaveSynthAudioProcessorEditor::ImagePreviewComponent::paint(juce::Gr
         const auto cx = drawArea.getX() + rectX * drawArea.getWidth();
         const auto cy = drawArea.getY() + rectY * drawArea.getHeight();
 
-        g.drawRect(cx - 0.5f * w, cy - 0.5f * h, w, h, 2.2f);
+        const auto center = juce::Point<float>(cx, cy);
+        const auto halfW = 0.5f * w;
+        const auto halfH = 0.5f * h;
+        const auto rotationRadians = juce::degreesToRadians(rectRotation);
+        const auto topLeft = rotatePoint({ cx - halfW, cy - halfH }, center, rotationRadians);
+        const auto topRight = rotatePoint({ cx + halfW, cy - halfH }, center, rotationRadians);
+        const auto bottomRight = rotatePoint({ cx + halfW, cy + halfH }, center, rotationRadians);
+        const auto bottomLeft = rotatePoint({ cx - halfW, cy + halfH }, center, rotationRadians);
+
+        juce::Path rectPath;
+        rectPath.startNewSubPath(topLeft);
+        rectPath.lineTo(topRight);
+        rectPath.lineTo(bottomRight);
+        rectPath.lineTo(bottomLeft);
+        rectPath.closeSubPath();
+        g.strokePath(rectPath, juce::PathStrokeType(2.2f));
         g.fillEllipse(cx - 4.0f, cy - 4.0f, 8.0f, 8.0f);
         g.fillEllipse((cx - 0.5f * w) - 3.0f, (cy - 0.5f * h) - 3.0f, 6.0f, 6.0f);
         g.fillEllipse((cx + 0.5f * w) - 3.0f, (cy + 0.5f * h) - 3.0f, 6.0f, 6.0f);
@@ -1995,6 +2068,7 @@ void PictureWaveSynthAudioProcessorEditor::configureModeSpecificResetBehaviour()
         configureSliderReset(shapeCtrl2Slider, "ovalY1");
         configureSliderReset(shapeCtrl3Slider, "ovalX2");
         configureSliderReset(shapeCtrl4Slider, "ovalY2");
+        configureSliderReset(shapeCtrl5Slider, "ovalRotation");
     }
     else if (mode == 3)
     {
@@ -2002,6 +2076,7 @@ void PictureWaveSynthAudioProcessorEditor::configureModeSpecificResetBehaviour()
         configureSliderReset(shapeCtrl2Slider, "rectY");
         configureSliderReset(shapeCtrl3Slider, "rectWidth");
         configureSliderReset(shapeCtrl4Slider, "rectHeight");
+        configureSliderReset(shapeCtrl5Slider, "rectRotation");
     }
     else if (mode == 4)
     {
@@ -2168,10 +2243,12 @@ void PictureWaveSynthAudioProcessorEditor::refreshImagePreview()
         audioProcessor.getEffectiveParameterValue("ovalY1"),
         audioProcessor.getEffectiveParameterValue("ovalX2"),
         audioProcessor.getEffectiveParameterValue("ovalY2"),
+        audioProcessor.getEffectiveParameterValue("ovalRotation"),
         audioProcessor.getEffectiveParameterValue("rectX"),
         audioProcessor.getEffectiveParameterValue("rectY"),
         audioProcessor.getEffectiveParameterValue("rectWidth"),
         audioProcessor.getEffectiveParameterValue("rectHeight"),
+        audioProcessor.getEffectiveParameterValue("rectRotation"),
         audioProcessor.getEffectiveParameterValue("triX1"),
         audioProcessor.getEffectiveParameterValue("triY1"),
         audioProcessor.getEffectiveParameterValue("triX2"),
@@ -2686,6 +2763,7 @@ void PictureWaveSynthAudioProcessorEditor::refreshModulationVisuals()
         updateSlider(shapeCtrl2Slider, "ovalY1");
         updateSlider(shapeCtrl3Slider, "ovalX2");
         updateSlider(shapeCtrl4Slider, "ovalY2");
+        updateSlider(shapeCtrl5Slider, "ovalRotation");
     }
     else if (mode == 3)
     {
@@ -2693,6 +2771,7 @@ void PictureWaveSynthAudioProcessorEditor::refreshModulationVisuals()
         updateSlider(shapeCtrl2Slider, "rectY");
         updateSlider(shapeCtrl3Slider, "rectWidth");
         updateSlider(shapeCtrl4Slider, "rectHeight");
+        updateSlider(shapeCtrl5Slider, "rectRotation");
     }
     else if (mode == 4)
     {
@@ -3107,6 +3186,7 @@ void PictureWaveSynthAudioProcessorEditor::rebuildModeAttachments()
         modeCtrl2Attachment = std::make_unique<SliderAttachment>(audioProcessor.parameters, "ovalY1", shapeCtrl2Slider);
         modeCtrl3Attachment = std::make_unique<SliderAttachment>(audioProcessor.parameters, "ovalX2", shapeCtrl3Slider);
         modeCtrl4Attachment = std::make_unique<SliderAttachment>(audioProcessor.parameters, "ovalY2", shapeCtrl4Slider);
+        modeCtrl5Attachment = std::make_unique<SliderAttachment>(audioProcessor.parameters, "ovalRotation", shapeCtrl5Slider);
     }
     else if (mode == 3)
     {
@@ -3114,6 +3194,7 @@ void PictureWaveSynthAudioProcessorEditor::rebuildModeAttachments()
         modeCtrl2Attachment = std::make_unique<SliderAttachment>(audioProcessor.parameters, "rectY", shapeCtrl2Slider);
         modeCtrl3Attachment = std::make_unique<SliderAttachment>(audioProcessor.parameters, "rectWidth", shapeCtrl3Slider);
         modeCtrl4Attachment = std::make_unique<SliderAttachment>(audioProcessor.parameters, "rectHeight", shapeCtrl4Slider);
+        modeCtrl5Attachment = std::make_unique<SliderAttachment>(audioProcessor.parameters, "rectRotation", shapeCtrl5Slider);
     }
     else if (mode == 4)
     {
@@ -3165,6 +3246,11 @@ void PictureWaveSynthAudioProcessorEditor::updateModeControlLabelsAndVisibility(
     setControlVisibility(scanYSlider, scanYLabel, false);
     setControlVisibility(scanLengthSlider, scanLengthLabel, false);
     setControlVisibility(scanAngleSlider, scanAngleLabel, false);
+    shapeCtrl5Slider.setName({});
+    shapeCtrl4Slider.textFromValueFunction = nullptr;
+    shapeCtrl4Slider.valueFromTextFunction = nullptr;
+    shapeCtrl5Slider.textFromValueFunction = nullptr;
+    shapeCtrl5Slider.valueFromTextFunction = nullptr;
 
     if (mode == 1)
     {
@@ -3184,11 +3270,22 @@ void PictureWaveSynthAudioProcessorEditor::updateModeControlLabelsAndVisibility(
         shapeCtrl2Label.setText("Oval Y1", juce::dontSendNotification);
         shapeCtrl3Label.setText("Oval X2", juce::dontSendNotification);
         shapeCtrl4Label.setText("Oval Y2", juce::dontSendNotification);
+        shapeCtrl5Label.setText("Oval Rot", juce::dontSendNotification);
+        shapeCtrl5Slider.setName("Oval Rot");
 
         setControlVisibility(shapeCtrl1Slider, shapeCtrl1Label, true);
         setControlVisibility(shapeCtrl2Slider, shapeCtrl2Label, true);
         setControlVisibility(shapeCtrl3Slider, shapeCtrl3Label, true);
         setControlVisibility(shapeCtrl4Slider, shapeCtrl4Label, true);
+        setControlVisibility(shapeCtrl5Slider, shapeCtrl5Label, true);
+        shapeCtrl5Slider.textFromValueFunction = [](double value)
+        {
+            return juce::String(std::lround(value)) + " deg";
+        };
+        shapeCtrl5Slider.valueFromTextFunction = [](const juce::String& text)
+        {
+            return text.retainCharacters("-0123456789.").getDoubleValue();
+        };
     }
     else if (mode == 3)
     {
@@ -3196,11 +3293,22 @@ void PictureWaveSynthAudioProcessorEditor::updateModeControlLabelsAndVisibility(
         shapeCtrl2Label.setText("Rect Y", juce::dontSendNotification);
         shapeCtrl3Label.setText("Rect Width", juce::dontSendNotification);
         shapeCtrl4Label.setText("Rect Height", juce::dontSendNotification);
+        shapeCtrl5Label.setText("Rect Rot", juce::dontSendNotification);
+        shapeCtrl5Slider.setName("Rect Rot");
 
         setControlVisibility(shapeCtrl1Slider, shapeCtrl1Label, true);
         setControlVisibility(shapeCtrl2Slider, shapeCtrl2Label, true);
         setControlVisibility(shapeCtrl3Slider, shapeCtrl3Label, true);
         setControlVisibility(shapeCtrl4Slider, shapeCtrl4Label, true);
+        setControlVisibility(shapeCtrl5Slider, shapeCtrl5Label, true);
+        shapeCtrl5Slider.textFromValueFunction = [](double value)
+        {
+            return juce::String(std::lround(value)) + " deg";
+        };
+        shapeCtrl5Slider.valueFromTextFunction = [](const juce::String& text)
+        {
+            return text.retainCharacters("-0123456789.").getDoubleValue();
+        };
     }
     else if (mode == 4)
     {

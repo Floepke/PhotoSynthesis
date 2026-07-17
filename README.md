@@ -75,10 +75,70 @@ Notes:
 - Standalone: `build/PhotoSynthesis_artefacts/Release/Standalone/`
 - VST3: `build/PhotoSynthesis_artefacts/Release/VST3/`
 
+On macOS, the standalone app is also copied after each build to:
+- `~/Applications/PhotoSynthesis.app`
+
 On macOS, the plugin is typically installed to:
 - `~/Library/Audio/Plug-Ins/VST3/PhotoSynthesis.vst3`
 
 If `COPY_PLUGIN_AFTER_BUILD` is enabled (default in this project), build/install is automatic.
+
+## Python RGBA Wavetable Generators
+
+The `python/` folder contains scripts for building wavetable images for PhotoSynthesis.
+
+### Mathematical RGBA Generator
+
+Script:
+- `python/generate_rgba_math_wavetable_image.py`
+
+Channel models:
+- `R`: Morph left-to-right: `sine -> triangle -> saw -> square`
+- `G`: Additive overtone accent model (spectral slope + odd/even emphasis)
+- `B`: Dual moving formant model (vowel-like spectral peaks)
+- `A`: Phase-distortion family (adds edge/definition)
+
+Example:
+
+```sh
+python3 python/generate_rgba_math_wavetable_image.py \
+  --width 512 \
+  --height 0 \
+  --viewer-aspect 2.0 \
+  --normalization global \
+  --flip-vertical \
+  --output python/wavetable_images/init_rgba_math_viewer_ratio_512.png
+```
+
+Notes:
+- `--height 0` means: auto-compute height from `width / viewer-aspect`.
+- If you want a fixed size, set both `--width` and `--height` explicitly.
+
+Useful tuning flags:
+- `--harmonics` (default `48`)
+- `--viewer-aspect` (default `2.0`)
+- `--green-odd-even-depth`
+- `--green-slope-min`, `--green-slope-max`
+- `--blue-formant-width-1`, `--blue-formant-width-2`, `--blue-formant-mix-2`
+- `--alpha-distortion-max`, `--alpha-shape`
+- `--normalization {none,global,per-channel,per-wave}`
+
+### Merge Existing WAVs Into RGBA
+
+If you already have four WAV wavetable sources:
+
+```sh
+python3 python/build_rgba_init_from_wavs.py \
+  --red path/to/r.wav \
+  --green path/to/g.wav \
+  --blue path/to/b.wav \
+  --alpha path/to/a.wav \
+  --samples-per-waveform 256 \
+  --target-frames 64 \
+  --normalization global \
+  --flip-vertical \
+  --output python/wavetable_images/init_rgba_256x64.png
+```
 
 ## Futures / Roadmap
 

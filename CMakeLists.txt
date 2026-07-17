@@ -22,6 +22,11 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(juce)
 
+juce_add_binary_data(PhotoSynthesisAssets
+  SOURCES
+    src/assets/init.pspreset
+)
+
 juce_add_plugin(PhotoSynthesis
   COMPANY_NAME "Philip Bergwerf"
   BUNDLE_ID "com.philipbergwerf.photosynthesis"
@@ -53,6 +58,7 @@ target_compile_definitions(PhotoSynthesis
 
 target_link_libraries(PhotoSynthesis
   PRIVATE
+    PhotoSynthesisAssets
     juce::juce_audio_utils
     juce::juce_dsp
   PUBLIC
@@ -70,3 +76,14 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
 endif()
 
 juce_generate_juce_header(PhotoSynthesis)
+
+if(APPLE)
+  add_custom_command(TARGET PhotoSynthesis_Standalone POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$ENV{HOME}/Applications"
+    COMMAND ${CMAKE_COMMAND} -E rm -rf "$ENV{HOME}/Applications/PhotoSynthesis.app"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+      "$<TARGET_BUNDLE_DIR:PhotoSynthesis_Standalone>"
+      "$ENV{HOME}/Applications/PhotoSynthesis.app"
+    COMMENT "Copying PhotoSynthesis Standalone to ~/Applications"
+  )
+endif()

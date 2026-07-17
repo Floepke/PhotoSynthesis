@@ -187,7 +187,7 @@ public:
     static IIRCoefficientsPtr createDcBlockerCoefficients(double sampleRate);
 
 private:
-    static constexpr int kNumModTargets = 37;
+    static constexpr int kNumModTargets = 39;
     using StereoIIRFilter = juce::dsp::ProcessorDuplicator<juce::dsp::IIR::Filter<float>, juce::dsp::IIR::Coefficients<float>>;
 
     struct LoadedImageData
@@ -209,10 +209,12 @@ private:
         float ovalY1 = 0.3f;
         float ovalX2 = 0.7f;
         float ovalY2 = 0.7f;
+        float ovalRotation = 0.0f;
         float rectX = 0.2f;
         float rectY = 0.2f;
         float rectWidth = 0.4f;
         float rectHeight = 0.3f;
+        float rectRotation = 0.0f;
         float triX1 = 0.25f;
         float triY1 = 0.2f;
         float triX2 = 0.75f;
@@ -242,6 +244,7 @@ private:
     bool applyLoadedImage(const juce::Image& image, juce::String& errorMessage);
     void clearLoadedImage();
     void updateWaveTablePreview(const float* left, const float* right);
+    void cacheParameterPointers();
     void updateDcBlocker();
     void updateFxFilter();
     void updateReverb();
@@ -279,6 +282,48 @@ private:
     std::vector<bool> perVoiceHasCachedScannerState;
     std::array<double, 8> lfoPhases{};
     std::array<int64_t, 8> lfoCyclePositions{};
+
+    struct ParameterCache
+    {
+        std::atomic<float>* maxVoices = nullptr;
+        std::atomic<float>* modResponseMs = nullptr;
+        std::atomic<float>* envType = nullptr;
+        std::atomic<float>* scanResolution = nullptr;
+        std::atomic<float>* scanSplineInterpolation = nullptr;
+        std::atomic<float>* scannerMode = nullptr;
+        std::atomic<float>* propSyncDivision = nullptr;
+        std::atomic<float>* propTempoSync = nullptr;
+        std::atomic<float>* randomPhase = nullptr;
+
+        std::atomic<float>* fxFilterType = nullptr;
+        std::atomic<float>* fxFilterCutoff = nullptr;
+        std::atomic<float>* fxFilterResonance = nullptr;
+        std::atomic<float>* fxFilterGain = nullptr;
+
+        std::atomic<float>* reverbRoomSize = nullptr;
+        std::atomic<float>* reverbDamping = nullptr;
+        std::atomic<float>* reverbWidth = nullptr;
+        std::atomic<float>* reverbWet = nullptr;
+        std::atomic<float>* reverbDry = nullptr;
+        std::atomic<float>* reverbFreeze = nullptr;
+
+        std::array<std::atomic<float>*, 8> lfoRate{};
+        std::array<std::atomic<float>*, 8> lfoDepth{};
+        std::array<std::atomic<float>*, 8> lfoWave{};
+        std::array<std::atomic<float>*, 8> lfoSync{};
+        std::array<std::atomic<float>*, 8> lfoDivision{};
+        std::array<std::atomic<float>*, 8> lfoRandomPhasePerVoice{};
+
+        std::array<std::atomic<float>*, 32> modEnabled{};
+        std::array<std::atomic<float>*, 32> modSource{};
+        std::array<std::atomic<float>*, 32> modTarget{};
+        std::array<std::atomic<float>*, 32> modAmount{};
+        std::array<std::atomic<float>*, 32> modBipolar{};
+
+        std::array<juce::RangedAudioParameter*, kNumModTargets> modTargetParams{};
+        std::array<std::atomic<float>*, kNumModTargets> modTargetRaw{};
+    } paramCache;
+
     juce::Random instanceRandom;
     std::array<std::atomic<float>, kNumModTargets> modulationDisplayValues{};
     std::array<std::atomic<float>, kNumModTargets> effectiveDisplayValues{};
@@ -295,6 +340,14 @@ private:
     float modulationAftertouch = 0.0f;
     float modulationModWheel = 0.0f;
     int heldNoteCount = 0;
+
+    FxFilterSettings lastFxSettings{};
+    ReverbSettings lastReverbSettings{};
+    bool hasLastFxSettings = false;
+    bool hasLastReverbSettings = false;
+    double lastFxSampleRate = 0.0;
+    double lastDcSampleRate = 0.0;
+    bool hasLastDcSampleRate = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PictureWaveSynthAudioProcessor)
 };
