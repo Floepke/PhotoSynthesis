@@ -3,7 +3,7 @@
 // Single source of truth for plugin version metadata.
 namespace PhotoSynthesisVersion
 {
-constexpr const char* kVersion = "0.0.2";
+constexpr const char* kVersion = "1.0.0";
 constexpr const char* kDisplayName = "PhotoSynthesis";
 constexpr const char* kAuthor = "Philip Bergwerf";
 constexpr const char* kEmail = "philipbergwerf@gmail.com";
@@ -11,8 +11,8 @@ constexpr const char* kEmail = "philipbergwerf@gmail.com";
 
 /* 
 Changelog (latest first)
-0.0.2
-- ...
+1.0.0
+- initial release of PhotoSynthesis plugin.
 0.0.1
 - Initial public baseline.
 - Added modulation matrix with multiple source types.
