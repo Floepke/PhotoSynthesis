@@ -12,3 +12,5 @@ CMakeUserPresets.json
 compile_commands.json
 python/
 build-release/
+build/
+build-universal/

@@ -7,6 +7,12 @@ endif()
 
 project(PhotoSynthesis VERSION 0.0.1 LANGUAGES C CXX)
 
+# Build universal binary for macOS (arm64 + x86_64)
+if(APPLE)
+  set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64")
+  set(CMAKE_OSX_DEPLOYMENT_TARGET 10.11)
+endif()
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
