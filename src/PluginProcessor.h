@@ -278,6 +278,7 @@ private:
     std::vector<uint32_t> perVoiceWaveTableGenerations;
     std::vector<std::array<float, kNumModTargets>> perVoiceSmoothedModulationSums;
     std::vector<ScannerParams> perVoiceLastScannerParams;
+    std::vector<float> perVoiceLastContrast;
     std::vector<double> perVoiceLastPropellorPhase;
     std::vector<bool> perVoiceHasCachedScannerState;
     std::array<double, 8> lfoPhases{};
@@ -307,6 +308,8 @@ private:
         std::atomic<float>* reverbDry = nullptr;
         std::atomic<float>* reverbFreeze = nullptr;
 
+        std::atomic<float>* contrast = nullptr;
+
         std::array<std::atomic<float>*, 8> lfoRate{};
         std::array<std::atomic<float>*, 8> lfoDepth{};
         std::array<std::atomic<float>*, 8> lfoWave{};
@@ -334,6 +337,7 @@ private:
     juce::MemoryBlock initialStateWithoutImage;
     ScannerParams lastScannerParams;
     bool hasLastScannerParams = false;
+    float lastContrast = 0.0f;
     int modulationPreviewVoiceIndex = -1;
     uint32_t modulationPreviewSeed = 0;
     float modulationVelocity = 0.0f;

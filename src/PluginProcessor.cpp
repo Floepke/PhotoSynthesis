@@ -674,6 +674,7 @@ PictureWaveSynthAudioProcessor::PictureWaveSynthAudioProcessor()
     }
     perVoiceLastScannerParams.resize(static_cast<size_t>(kMaxVoices));
     perVoiceLastPropellorPhase.resize(static_cast<size_t>(kMaxVoices), 0.0);
+    perVoiceLastContrast.resize(static_cast<size_t>(kMaxVoices), 0.0f);
     perVoiceHasCachedScannerState.resize(static_cast<size_t>(kMaxVoices), false);
 
     generateFallbackWaveTables(previewWaveTableLeft.data(), previewWaveTableRight.data());
@@ -1383,11 +1384,13 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
                 }
 
                 const auto phaseValue = basePropellorPhase + voice->getPropellorPhaseOffset();
+                const auto currentContrast = paramCache.contrast != nullptr ? paramCache.contrast->load() : 0.0f;
+                const auto contrastChanged = std::abs(currentContrast - perVoiceLastContrast[static_cast<size_t>(i)]) > 1.0e-4;
                 const auto scannerChanged = !perVoiceHasCachedScannerState[static_cast<size_t>(i)]
                     || !scannerParamsEqual(voiceScanner, perVoiceLastScannerParams[static_cast<size_t>(i)]);
                 const auto phaseChanged = std::abs(phaseValue - perVoiceLastPropellorPhase[static_cast<size_t>(i)]) > 1.0e-4;
 
-                if ((scannerChanged || (voiceScanner.mode == 4 && phaseChanged))
+                if ((scannerChanged || contrastChanged || (voiceScanner.mode == 4 && phaseChanged))
                     && localImage != nullptr && localImage->width > 1 && localImage->height > 1)
                 {
                     regenerateWaveTablesFromImage(*localImage,
@@ -1396,6 +1399,7 @@ void PictureWaveSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buff
                                                   left.data(),
                                                   right.data());
                     perVoiceLastScannerParams[static_cast<size_t>(i)] = voiceScanner;
+                    perVoiceLastContrast[static_cast<size_t>(i)] = currentContrast;
                     perVoiceLastPropellorPhase[static_cast<size_t>(i)] = phaseValue;
                     perVoiceHasCachedScannerState[static_cast<size_t>(i)] = true;
                     ++perVoiceWaveTableGenerations[static_cast<size_t>(i)];
@@ -1788,6 +1792,9 @@ PictureWaveSynthAudioProcessor::ParameterLayout PictureWaveSynthAudioProcessor::
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         "mapAR", "A -> R", juce::NormalisableRange<float>(-1.0f, 1.0f, 0.001f), 0.0f));
 
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        "contrast", "Contrast", juce::NormalisableRange<float>(-1.0f, 1.0f, 0.001f), 0.0f));
+
     return { params.begin(), params.end() };
 }
 
@@ -2019,6 +2026,8 @@ void PictureWaveSynthAudioProcessor::cacheParameterPointers()
     paramCache.reverbDry = cacheRaw("reverbDry");
     paramCache.reverbFreeze = cacheRaw("reverbFreeze");
 
+    paramCache.contrast = cacheRaw("contrast");
+
     for (int i = 0; i < kNumLfos; ++i)
     {
         const auto idx = juce::String(i + 1);
@@ -2107,8 +2116,10 @@ void PictureWaveSynthAudioProcessor::updateReverb()
 
 void PictureWaveSynthAudioProcessor::regenerateWaveTablesIfNeeded(const ScannerParams& scanner)
 {
+    const auto currentContrast = paramCache.contrast != nullptr ? paramCache.contrast->load() : 0.0f;
+    const auto contrastChanged = std::abs(currentContrast - lastContrast) > 1.0e-4;
     const auto scannerChanged = !hasLastScannerParams || !scannerParamsEqual(scanner, lastScannerParams);
-    if (!scannerChanged && !waveTableDirty.load())
+    if (!scannerChanged && !contrastChanged && !waveTableDirty.load())
     {
         return;
     }
@@ -2135,6 +2146,7 @@ void PictureWaveSynthAudioProcessor::regenerateWaveTablesIfNeeded(const ScannerP
     updateWaveTablePreview(waveTableLeft.data(), waveTableRight.data());
 
     lastScannerParams = scanner;
+    lastContrast = currentContrast;
     hasLastScannerParams = true;
     ++waveTableGeneration;
     waveTableDirty.store(false);
@@ -2153,6 +2165,15 @@ void PictureWaveSynthAudioProcessor::regenerateWaveTablesFromImage(const LoadedI
     float sumLeft = 0.0f;
     float sumRight = 0.0f;
 
+    // Get contrast amount from parameter cache
+    const auto contrastAmount = paramCache.contrast != nullptr ? paramCache.contrast->load() : 0.0f;
+    const auto contrastFactor = 1.0f + contrastAmount * 3.0f;
+    
+    auto applyContrast = [contrastFactor](float value) -> float
+    {
+        return juce::jlimit(0.0f, 1.0f, 0.5f + (value - 0.5f) * contrastFactor);
+    };
+
     for (int i = 0; i < sampleCount; ++i)
     {
         const auto t = static_cast<float>(i) / static_cast<float>(juce::jmax(1, sampleCount - 1));
@@ -2160,7 +2181,13 @@ void PictureWaveSynthAudioProcessor::regenerateWaveTablesFromImage(const LoadedI
         const auto u = juce::jlimit(0.0f, 1.0f, uv[0]);
         const auto v = juce::jlimit(0.0f, 1.0f, uv[1]);
 
-        const auto rgba = sampleImageBilinear(imageData, u, v);
+        auto rgba = sampleImageBilinear(imageData, u, v);
+        
+        // Apply contrast to RGBA values
+        rgba[0] = applyContrast(rgba[0]);
+        rgba[1] = applyContrast(rgba[1]);
+        rgba[2] = applyContrast(rgba[2]);
+        rgba[3] = applyContrast(rgba[3]);
 
         const auto r = rgba[0] * 2.0f - 1.0f;
         const auto g = rgba[1] * 2.0f - 1.0f;

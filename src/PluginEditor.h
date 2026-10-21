@@ -28,6 +28,7 @@ private:
         using ParameterChangeCallback = std::function<void(const juce::String&, float)>;
 
         void setImage(juce::Image newImage);
+        void setContrast(float newContrast);
         void setScanner(
             int mode,
             float lineX1,
@@ -90,6 +91,8 @@ private:
         void dragTriHandle(DragHandle handle, juce::Point<float> p);
 
         juce::Image image;
+        juce::Image contrastedImage;
+        float currentContrast = 0.0f;
         ParameterChangeCallback parameterChangeCallback;
         DragHandle activeHandle = DragHandle::none;
         int scannerMode = 0;
@@ -272,6 +275,7 @@ private:
     ModulationSlider gainSlider;
     ModulationSlider noteDriftSlider;
     ModulationSlider liveNoteDriftSlider;
+    ModulationSlider contrastSlider;
     juce::Label envTypeLabel;
     ResettableComboBox envTypeCombo;
 
@@ -282,6 +286,7 @@ private:
     juce::Label gainLabel;
     juce::Label noteDriftLabel;
     juce::Label liveNoteDriftLabel;
+    juce::Label contrastLabel;
 
     ModulationSlider mapRLSlider;
     ModulationSlider mapGLSlider;
@@ -398,6 +403,7 @@ private:
     std::unique_ptr<SliderAttachment> gainAttachment;
     std::unique_ptr<SliderAttachment> noteDriftAttachment;
     std::unique_ptr<SliderAttachment> liveNoteDriftAttachment;
+    std::unique_ptr<SliderAttachment> contrastAttachment;
     std::unique_ptr<ComboBoxAttachment> envTypeAttachment;
 
     std::unique_ptr<SliderAttachment> scanXAttachment;

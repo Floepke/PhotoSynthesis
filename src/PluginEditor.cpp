@@ -695,6 +695,58 @@ void PictureWaveSynthAudioProcessorEditor::ResettableToggleButton::mouseDoubleCl
 void PictureWaveSynthAudioProcessorEditor::ImagePreviewComponent::setImage(juce::Image newImage)
 {
     image = std::move(newImage);
+    currentContrast = 0.0f;
+    contrastedImage = {};
+    repaint();
+}
+
+void PictureWaveSynthAudioProcessorEditor::ImagePreviewComponent::setContrast(float newContrast)
+{
+    if (std::abs(newContrast - currentContrast) < 1.0e-4f && contrastedImage.isValid())
+    {
+        return;  // No change needed
+    }
+
+    currentContrast = newContrast;
+
+    if (!image.isValid())
+    {
+        contrastedImage = {};
+        repaint();
+        return;
+    }
+
+    // Create a contrasted copy of the image
+    contrastedImage = image.createCopy();
+    
+    if (std::abs(newContrast) > 1.0e-4f)
+    {
+        const auto contrastFactor = juce::jlimit(0.01f, 3.0f, 1.0f + newContrast * 3.0f);
+        const auto applyContrast = [contrastFactor](uint8_t value) -> uint8_t {
+            const auto normalized = static_cast<float>(value) / 255.0f;
+            const auto contrasted = 0.5f + (normalized - 0.5f) * contrastFactor;
+            return static_cast<uint8_t>(juce::jlimit(0.0f, 1.0f, contrasted) * 255.0f);
+        };
+
+        // Apply contrast to each pixel
+        for (int y = 0; y < contrastedImage.getHeight(); ++y)
+        {
+            for (int x = 0; x < contrastedImage.getWidth(); ++x)
+            {
+                const auto pixel = contrastedImage.getPixelAt(x, y);
+                const auto r = applyContrast(pixel.getRed());
+                const auto g = applyContrast(pixel.getGreen());
+                const auto b = applyContrast(pixel.getBlue());
+                const auto a = pixel.getAlpha();
+                contrastedImage.setPixelAt(x, y, juce::Colour(r, g, b, a));
+            }
+        }
+    }
+    else
+    {
+        contrastedImage = image.createCopy();
+    }
+
     repaint();
 }
 
@@ -1124,7 +1176,9 @@ void PictureWaveSynthAudioProcessorEditor::ImagePreviewComponent::paint(juce::Gr
             drawArea = { content.getCentreX() - width * 0.5f, content.getY(), width, content.getHeight() };
         }
 
-        g.drawImage(image, drawArea);
+        // Draw contrasted image if available, otherwise draw original
+        const auto& displayImage = contrastedImage.isValid() ? contrastedImage : image;
+        g.drawImage(displayImage, drawArea);
     }
     else
     {
@@ -1440,6 +1494,13 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
     gainSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 70, 20);
     setupLinearSlider(noteDriftSlider, "Note Drift");
     setupLinearSlider(liveNoteDriftSlider, "Drift Freq");
+    
+    // Setup contrast as a rotary knob
+    contrastSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+    contrastSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 70, 20);
+    contrastSlider.setName("Contrast");
+    addAndMakeVisible(contrastSlider);
+    setupSmallLabel(contrastLabel, "Contrast");
 
     attackSlider.setSliderStyle(juce::Slider::LinearVertical);
     attackSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 70, 20);
@@ -1461,6 +1522,7 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
     setupSmallLabel(gainLabel, "Gain");
     setupSmallLabel(noteDriftLabel, "Note Drift");
     setupSmallLabel(liveNoteDriftLabel, "Drift Freq");
+    setupSmallLabel(contrastLabel, "Contrast");
 
     envTypeLabel.setText("Env.", juce::dontSendNotification);
     envTypeLabel.setJustificationType(juce::Justification::centredRight);
@@ -1529,6 +1591,8 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
         audioProcessor.parameters, "noteDrift", noteDriftSlider);
     liveNoteDriftAttachment = std::make_unique<SliderAttachment>(
         audioProcessor.parameters, "liveNoteDrift", liveNoteDriftSlider);
+    contrastAttachment = std::make_unique<SliderAttachment>(
+        audioProcessor.parameters, "contrast", contrastSlider);
 
     scanXAttachment = std::make_unique<SliderAttachment>(
         audioProcessor.parameters, "lineX1", scanXSlider);
@@ -1807,6 +1871,8 @@ PictureWaveSynthAudioProcessorEditor::PictureWaveSynthAudioProcessorEditor(Pictu
     addToPhotoScannerPage(savePresetButton);
     addToPhotoScannerPage(imageStatusLabel);
     addToPhotoScannerPage(imagePreview);
+    addToPhotoScannerPage(contrastSlider);
+    addToPhotoScannerPage(contrastLabel);
 
     addToPhotoScannerPage(scannerModeLabel);
     addToPhotoScannerPage(scannerModeCombo);
@@ -2230,6 +2296,10 @@ void PictureWaveSynthAudioProcessorEditor::refreshImagePreview()
 
     imagePreview.setImage(imageCopy);
 
+    // Update contrast visualization
+    const auto contrast = audioProcessor.getEffectiveParameterValue("contrast");
+    imagePreview.setContrast(contrast);
+
     const auto propPhase = audioProcessor.getPropellorPhase();
     const auto mode = juce::jlimit(0, 4, static_cast<int>(std::lround(audioProcessor.parameters.getRawParameterValue("scannerMode")->load())));
 
@@ -2337,9 +2407,14 @@ void PictureWaveSynthAudioProcessorEditor::resized()
     imageStatusLabel.setBounds(pagePad, 34, juce::jmax(200, photoW - 2 * pagePad), 22);
 
     const int imageTop = 60;
-    const int imageX = pagePad;
+    const int imageEditingKnobW = 54;  // Width for first knob column
+    const int knobY = imageTop;
+    contrastSlider.setBounds(pagePad, knobY, imageEditingKnobW, imageEditingKnobW);
+    contrastLabel.setBounds(pagePad, knobY + imageEditingKnobW, imageEditingKnobW, 18);
+    
+    const int imageX = pagePad + imageEditingKnobW + 12;
     const int imageH = juce::jmax(200, photoH - imageTop - pagePad);
-    const int imageW = juce::jlimit(380, 650, photoW - 360);
+    const int imageW = juce::jlimit(380, 650, photoW - imageX - 360);
     imagePreview.setBounds(imageX, imageTop, imageW, imageH);
 
     const int scannerStartX = imageX + imageW + 12;
